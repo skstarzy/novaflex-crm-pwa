@@ -843,6 +843,9 @@ function Affiliates({ showToast }) {
   const [form, setForm] = useState({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10 });
   const [applications, setApplications] = useState([]);
   const [approvingId, setApprovingId] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10 });
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const pct = (r) => Math.round(Number(r) * 100);
 
@@ -898,8 +901,41 @@ function Affiliates({ showToast }) {
   };
 
   const openDetail = async (id) => {
-    try { setSelected(await apiFetch(`/api/affiliates/${id}`)); }
+    try { setEditing(false); setSelected(await apiFetch(`/api/affiliates/${id}`)); }
     catch (err) { showToast(err.message); }
+  };
+
+  const closeDetail = () => { setSelected(null); setEditing(false); };
+
+  const startEdit = (a) => {
+    setEditForm({ name: a.name, email: a.email || "", code: a.code, discountPct: pct(a.discountRate), commissionPct: pct(a.commissionRate) });
+    setEditing(true);
+  };
+
+  const saveEdit = async () => {
+    if (!editForm.name.trim()) { showToast("Name is required"); return; }
+    setSavingEdit(true);
+    try {
+      await apiFetch(`/api/affiliates/${selected.id}`, { method: "PATCH", body: {
+        name: editForm.name.trim(), email: editForm.email.trim(), code: editForm.code.trim(),
+        discountRate: Number(editForm.discountPct) / 100, commissionRate: Number(editForm.commissionPct) / 100,
+      }});
+      setEditing(false);
+      await load();
+      await openDetail(selected.id);
+      showToast("Affiliate updated");
+    } catch (err) { showToast(err.message); }
+    finally { setSavingEdit(false); }
+  };
+
+  const removeAffiliate = async (a) => {
+    if (!window.confirm(`Delete affiliate "${a.name}" (code ${a.code})?\n\nPast orders are kept but will no longer be linked to this affiliate. This can't be undone.`)) return;
+    try {
+      await apiFetch(`/api/affiliates/${a.id}`, { method: "DELETE" });
+      closeDetail();
+      await load();
+      showToast("Affiliate deleted");
+    } catch (err) { showToast(err.message); }
   };
 
   const toggleStatus = async (a) => {
@@ -1029,21 +1065,56 @@ function Affiliates({ showToast }) {
       )}
 
       {selected && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setSelected(null)}>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={closeDetail}>
           <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-5 w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-1">
-              <h3 className="font-semibold">{selected.name}</h3>
-              <button onClick={() => setSelected(null)} className="text-zinc-500 hover:text-zinc-200"><X size={16} /></button>
+              <h3 className="font-semibold">{editing ? "Edit affiliate" : selected.name}</h3>
+              <button onClick={closeDetail} className="text-zinc-500 hover:text-zinc-200"><X size={16} /></button>
             </div>
-            {selected.email && <div className="text-zinc-400 text-sm">{selected.email}</div>}
-            <div className="flex items-center gap-2 mt-3 flex-wrap">
-              <button onClick={() => copyCode(selected.code)} className="inline-flex items-center gap-1.5 bg-zinc-950 border border-zinc-700 rounded px-2.5 py-1 font-mono text-sm text-amber-400 hover:border-amber-500">{selected.code}</button>
-              <span className="text-xs text-zinc-500">{pct(selected.discountRate)}% off · {pct(selected.commissionRate)}% commission</span>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => toggleStatus(selected)} className="flex-1 py-2 rounded border border-zinc-700 text-sm hover:bg-zinc-800">{selected.status === "active" ? "Pause code" : "Reactivate"}</button>
-              <button onClick={() => markPaid(selected)} className="flex-1 py-2 rounded bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-500">Mark commissions paid</button>
-            </div>
+
+            {editing ? (
+              <div className="mt-3 space-y-3">
+                <div>
+                  <label className="text-xs text-zinc-500 uppercase tracking-wide font-mono block mb-1">Name</label>
+                  <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
+                </div>
+                <div>
+                  <label className="text-xs text-zinc-500 uppercase tracking-wide font-mono block mb-1">Email</label>
+                  <input value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
+                </div>
+                <div>
+                  <label className="text-xs text-zinc-500 uppercase tracking-wide font-mono block mb-1">Code</label>
+                  <input value={editForm.code} onChange={(e) => setEditForm({ ...editForm, code: e.target.value.toUpperCase() })} className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-amber-500" />
+                </div>
+                <div className="flex gap-3">
+                  <label className="flex-1 text-xs text-zinc-400">Discount %
+                    <input type="number" min="0" max="100" value={editForm.discountPct} onChange={(e) => setEditForm({ ...editForm, discountPct: e.target.value })} className="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
+                  </label>
+                  <label className="flex-1 text-xs text-zinc-400">Commission %
+                    <input type="number" min="0" max="100" value={editForm.commissionPct} onChange={(e) => setEditForm({ ...editForm, commissionPct: e.target.value })} className="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
+                  </label>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button onClick={() => setEditing(false)} className="flex-1 py-2 rounded border border-zinc-700 text-sm hover:bg-zinc-800">Cancel</button>
+                  <button onClick={saveEdit} disabled={savingEdit} className="flex-1 py-2 rounded bg-amber-500 text-zinc-900 font-semibold text-sm hover:bg-amber-400 disabled:opacity-50">{savingEdit ? "Saving…" : "Save changes"}</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {selected.email && <div className="text-zinc-400 text-sm">{selected.email}</div>}
+                <div className="flex items-center gap-2 mt-3 flex-wrap">
+                  <button onClick={() => copyCode(selected.code)} className="inline-flex items-center gap-1.5 bg-zinc-950 border border-zinc-700 rounded px-2.5 py-1 font-mono text-sm text-amber-400 hover:border-amber-500">{selected.code}</button>
+                  <span className="text-xs text-zinc-500">{pct(selected.discountRate)}% off · {pct(selected.commissionRate)}% commission</span>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-4">
+                  <button onClick={() => startEdit(selected)} className="flex-1 min-w-[130px] py-2 rounded border border-amber-500/50 text-amber-400 text-sm hover:bg-amber-500/10">Edit rates / details</button>
+                  <button onClick={() => toggleStatus(selected)} className="flex-1 min-w-[130px] py-2 rounded border border-zinc-700 text-sm hover:bg-zinc-800">{selected.status === "active" ? "Pause code" : "Reactivate"}</button>
+                  <button onClick={() => markPaid(selected)} className="flex-1 min-w-[130px] py-2 rounded bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-500">Mark commissions paid</button>
+                  <button onClick={() => removeAffiliate(selected)} className="flex-1 min-w-[130px] py-2 rounded border border-red-500/40 text-red-400 text-sm hover:bg-red-500/10">Delete</button>
+                </div>
+              </>
+            )}
+
             <h4 className="text-xs uppercase tracking-wide text-zinc-500 font-mono mt-5 mb-2">Orders with this code</h4>
             {(!selected.orders || selected.orders.length === 0) ? <p className="text-zinc-500 text-sm">No orders yet.</p> : (
               <div className="space-y-2">
