@@ -184,6 +184,7 @@ function CRM({ user, onLogout }) {
         {tab === "inventory" && <Inventory products={products} refreshAll={refreshAll} showToast={showToast} />}
         {tab === "orders" && <Orders products={products} customers={customers} orders={orders} refreshAll={refreshAll} showToast={showToast} />}
         {tab === "customers" && <Customers customers={customers} orders={orders} refreshAll={refreshAll} showToast={showToast} />}
+        {tab === "affiliates" && <Affiliates showToast={showToast} />}
       </main>
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-amber-500 text-zinc-900 font-semibold px-5 py-2.5 rounded shadow-lg z-50 flex items-center gap-2">
@@ -200,6 +201,7 @@ function TopNav({ tab, setTab, lowStockCount, user, onLogout }) {
     { id: "inventory", label: "Inventory", icon: Package, badge: lowStockCount },
     { id: "orders", label: "Orders", icon: ShoppingCart },
     { id: "customers", label: "Customers", icon: Users },
+    { id: "affiliates", label: "Affiliates", icon: TrendingUp },
   ];
   return (
     <header className="border-b border-zinc-800 bg-zinc-950/95 sticky top-0 z-40 backdrop-blur">
@@ -815,6 +817,181 @@ function Customers({ customers, orders, refreshAll, showToast }) {
                       <span className="font-mono">{money(o.total)}</span>
                     </div>
                     <div className="text-zinc-500 text-xs">{o.items.map((i) => `${i.name} ×${i.qty}`).join(", ")}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Affiliates({ showToast }) {
+  const [affiliates, setAffiliates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10 });
+
+  const pct = (r) => Math.round(Number(r) * 100);
+
+  const load = async () => {
+    try { setAffiliates(await apiFetch("/api/affiliates")); }
+    catch (err) { showToast(err.message); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const create = async () => {
+    if (!form.name.trim()) { showToast("Name is required"); return; }
+    setBusy(true);
+    try {
+      await apiFetch("/api/affiliates", { method: "POST", body: {
+        name: form.name.trim(), email: form.email.trim(), code: form.code.trim(),
+        discountRate: Number(form.discountPct) / 100, commissionRate: Number(form.commissionPct) / 100,
+      }});
+      setForm({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10 });
+      setShowForm(false);
+      await load();
+      showToast("Affiliate created");
+    } catch (err) { showToast(err.message); }
+    finally { setBusy(false); }
+  };
+
+  const openDetail = async (id) => {
+    try { setSelected(await apiFetch(`/api/affiliates/${id}`)); }
+    catch (err) { showToast(err.message); }
+  };
+
+  const toggleStatus = async (a) => {
+    try {
+      await apiFetch(`/api/affiliates/${a.id}`, { method: "PATCH", body: { status: a.status === "active" ? "paused" : "active" } });
+      await load();
+      if (selected && selected.id === a.id) await openDetail(a.id);
+      showToast(a.status === "active" ? "Affiliate paused" : "Affiliate reactivated");
+    } catch (err) { showToast(err.message); }
+  };
+
+  const markPaid = async (a) => {
+    try {
+      const r = await apiFetch(`/api/affiliates/${a.id}/mark-paid`, { method: "POST" });
+      await load();
+      if (selected && selected.id === a.id) await openDetail(a.id);
+      showToast(`Marked ${r.markedPaid} commission${r.markedPaid !== 1 ? "s" : ""} paid`);
+    } catch (err) { showToast(err.message); }
+  };
+
+  const copyCode = (code) => { navigator.clipboard?.writeText(code); showToast(`Copied ${code}`); };
+
+  const totalSales = affiliates.reduce((s, a) => s + Number(a.totalSales || 0), 0);
+  const totalOwed = affiliates.reduce((s, a) => s + Number(a.commissionOwed || 0), 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold">Affiliates</h1>
+          <p className="text-zinc-500 text-sm mt-0.5">Influencer codes — a discount for customers, commission for the promoter.</p>
+        </div>
+        <button onClick={() => setShowForm(true)} className="flex items-center gap-1.5 bg-amber-500 text-zinc-900 font-semibold text-sm px-3 py-2 rounded hover:bg-amber-400">
+          <Plus size={15} /> Add Affiliate
+        </button>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <StatCard label="Affiliates" value={affiliates.length} icon={Users} />
+        <StatCard label="Sales via codes" value={money(totalSales)} icon={TrendingUp} />
+        <StatCard label="Commission owed" value={money(totalOwed)} icon={DollarSign} accent="text-emerald-400" />
+      </div>
+
+      {loading ? (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-10 text-center text-zinc-500 text-sm">Loading…</div>
+      ) : affiliates.length === 0 ? (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-10 text-center text-zinc-500 text-sm">No affiliates yet. Add your first promoter to generate their code.</div>
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {affiliates.map((a) => (
+            <div key={a.id} className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+              <div className="flex items-start justify-between gap-2">
+                <button onClick={() => openDetail(a.id)} className="text-left min-w-0">
+                  <div className="font-semibold truncate">{a.name}</div>
+                  {a.email && <div className="text-zinc-500 text-xs mt-0.5 truncate">{a.email}</div>}
+                </button>
+                <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded font-mono uppercase ${a.status === "active" ? "bg-emerald-500/15 text-emerald-400" : "bg-zinc-700/40 text-zinc-400"}`}>{a.status}</span>
+              </div>
+              <button onClick={() => copyCode(a.code)} title="Copy code" className="mt-3 inline-flex items-center gap-1.5 bg-zinc-950 border border-zinc-700 rounded px-2 py-1 font-mono text-sm text-amber-400 hover:border-amber-500">{a.code}</button>
+              <div className="text-[11px] text-zinc-500 mt-1">{pct(a.discountRate)}% off · {pct(a.commissionRate)}% commission</div>
+              <div className="grid grid-cols-3 gap-2 mt-3 text-center">
+                <div><div className="font-mono text-sm">{a.paidOrders}</div><div className="text-[10px] text-zinc-500 uppercase">Orders</div></div>
+                <div><div className="font-mono text-sm text-amber-400">{money(a.totalSales)}</div><div className="text-[10px] text-zinc-500 uppercase">Sales</div></div>
+                <div><div className="font-mono text-sm text-emerald-400">{money(a.commissionOwed)}</div><div className="text-[10px] text-zinc-500 uppercase">Owed</div></div>
+              </div>
+              <button onClick={() => openDetail(a.id)} className="w-full mt-3 text-xs text-zinc-400 hover:text-amber-400 border-t border-zinc-800 pt-2 flex items-center justify-center gap-1">Manage <ChevronRight size={12} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showForm && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowForm(false)}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-5 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold">Add Affiliate</h3>
+              <button onClick={() => setShowForm(false)} className="text-zinc-500 hover:text-zinc-200"><X size={16} /></button>
+            </div>
+            <div className="space-y-3">
+              <input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
+              <input placeholder="Email (optional)" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
+              <input placeholder="Code (blank = auto from name)" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-amber-500" />
+              <div className="flex gap-3">
+                <label className="flex-1 text-xs text-zinc-400">Discount %
+                  <input type="number" min="0" max="100" value={form.discountPct} onChange={(e) => setForm({ ...form, discountPct: e.target.value })} className="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
+                </label>
+                <label className="flex-1 text-xs text-zinc-400">Commission %
+                  <input type="number" min="0" max="100" value={form.commissionPct} onChange={(e) => setForm({ ...form, commissionPct: e.target.value })} className="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
+                </label>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setShowForm(false)} className="flex-1 py-2 rounded border border-zinc-700 text-sm hover:bg-zinc-800">Cancel</button>
+              <button onClick={create} disabled={busy} className="flex-1 py-2 rounded bg-amber-500 text-zinc-900 font-semibold text-sm hover:bg-amber-400 disabled:opacity-50">{busy ? "Creating…" : "Create"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selected && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setSelected(null)}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-5 w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-semibold">{selected.name}</h3>
+              <button onClick={() => setSelected(null)} className="text-zinc-500 hover:text-zinc-200"><X size={16} /></button>
+            </div>
+            {selected.email && <div className="text-zinc-400 text-sm">{selected.email}</div>}
+            <div className="flex items-center gap-2 mt-3 flex-wrap">
+              <button onClick={() => copyCode(selected.code)} className="inline-flex items-center gap-1.5 bg-zinc-950 border border-zinc-700 rounded px-2.5 py-1 font-mono text-sm text-amber-400 hover:border-amber-500">{selected.code}</button>
+              <span className="text-xs text-zinc-500">{pct(selected.discountRate)}% off · {pct(selected.commissionRate)}% commission</span>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => toggleStatus(selected)} className="flex-1 py-2 rounded border border-zinc-700 text-sm hover:bg-zinc-800">{selected.status === "active" ? "Pause code" : "Reactivate"}</button>
+              <button onClick={() => markPaid(selected)} className="flex-1 py-2 rounded bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-500">Mark commissions paid</button>
+            </div>
+            <h4 className="text-xs uppercase tracking-wide text-zinc-500 font-mono mt-5 mb-2">Orders with this code</h4>
+            {(!selected.orders || selected.orders.length === 0) ? <p className="text-zinc-500 text-sm">No orders yet.</p> : (
+              <div className="space-y-2">
+                {selected.orders.map((o) => (
+                  <div key={o.id} className="border-t border-zinc-800 pt-2 text-sm flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-zinc-300 truncate">{o.customer?.name || "Customer"}</div>
+                      <div className="text-zinc-500 text-xs">{new Date(o.createdAt).toLocaleDateString()} · <span className={o.status === "paid" ? "text-emerald-400" : o.status === "pending" ? "text-amber-400" : "text-zinc-500"}>{o.status}</span></div>
+                    </div>
+                    <div className="text-right whitespace-nowrap">
+                      <div className="font-mono">{money(o.total)}</div>
+                      <div className="text-[11px] text-emerald-400 font-mono">+{money(o.commissionAmount)}{o.commissionPaid ? " ✓" : ""}</div>
+                    </div>
                   </div>
                 ))}
               </div>
