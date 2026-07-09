@@ -1,7 +1,31 @@
-const { useState, useEffect, useCallback } = React;
+const { useState, useEffect, useCallback, useRef } = React;
 
 const API = window.NOVAFLEX_API_URL;
 const money = (n) => `$${Number(n).toFixed(2)}`;
+
+// Short "ka-ching" chime for a new order. Best-effort — browsers may keep the
+// audio context suspended until the tab has had a user interaction (the user
+// is logged in and clicking around, so it normally plays).
+function orderChime() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const play = (freq, start, dur) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "sine"; o.frequency.value = freq;
+      o.connect(g); g.connect(ctx.destination);
+      g.gain.setValueAtTime(0.0001, ctx.currentTime + start);
+      g.gain.exponentialRampToValueAtTime(0.09, ctx.currentTime + start + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + dur);
+      o.start(ctx.currentTime + start); o.stop(ctx.currentTime + start + dur);
+    };
+    if (ctx.state === "suspended" && ctx.resume) ctx.resume();
+    play(988, 0, 0.16);
+    play(1319, 0.12, 0.28);
+    setTimeout(() => { try { ctx.close(); } catch (e) {} }, 700);
+  } catch (e) {}
+}
 
 const CATEGORIES = ["All", "Weight Loss", "Growth & Recovery", "Healing", "Skin & Aesthetics", "Cognitive & Longevity", "Stacks & Blends", "Supplies"];
 
@@ -141,8 +165,10 @@ function CRM({ user, onLogout }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
+  const [newOrderCount, setNewOrderCount] = useState(0);
+  const orderBaseline = useRef(null);
 
-  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2200); };
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3500); };
 
   const refreshAll = useCallback(async () => {
     const [p, c, o] = await Promise.all([
@@ -158,6 +184,41 @@ function CRM({ user, onLogout }) {
   useEffect(() => {
     refreshAll().finally(() => setLoading(false));
   }, [refreshAll]);
+
+  // Live new-order notifications: poll a lightweight endpoint. When the order
+  // count grows, chime, badge the Orders tab, toast the details, and refresh
+  // the data (so inventory/orders stay current without a manual reload).
+  useEffect(() => {
+    let stopped = false;
+    const poll = async () => {
+      try {
+        const ping = await apiFetch("/api/orders/ping");
+        if (stopped || !ping) return;
+        const base = orderBaseline.current;
+        if (base === null) {
+          orderBaseline.current = { count: ping.count };
+          return;
+        }
+        if (ping.count > base.count) {
+          const added = ping.count - base.count;
+          orderBaseline.current = { count: ping.count };
+          setNewOrderCount((n) => n + added);
+          orderChime();
+          const who = ping.latest && ping.latest.customerName ? ping.latest.customerName : "a customer";
+          const amt = ping.latest ? ` — ${money(ping.latest.total)}` : "";
+          showToast(added > 1 ? `${added} new orders` : `New order from ${who}${amt}`);
+          refreshAll().catch(() => {});
+        } else if (ping.count < base.count) {
+          orderBaseline.current = { count: ping.count };
+        }
+      } catch (e) { /* ignore transient poll errors */ }
+    };
+    const iv = setInterval(poll, 30000);
+    return () => { stopped = true; clearInterval(iv); };
+  }, [refreshAll]);
+
+  // Clear the Orders-tab badge once the user is looking at the orders.
+  useEffect(() => { if (tab === "orders") setNewOrderCount(0); }, [tab]);
 
   if (loading) {
     return (
@@ -175,7 +236,7 @@ function CRM({ user, onLogout }) {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans">
-      <TopNav tab={tab} setTab={setTab} lowStockCount={lowStock.length} user={user} onLogout={onLogout} />
+      <TopNav tab={tab} setTab={setTab} lowStockCount={lowStock.length} newOrderCount={newOrderCount} user={user} onLogout={onLogout} />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         {tab === "dashboard" && (
           <Dashboard products={products} orders={paidOrders} customers={customers} lowStock={lowStock}
@@ -195,11 +256,11 @@ function CRM({ user, onLogout }) {
   );
 }
 
-function TopNav({ tab, setTab, lowStockCount, user, onLogout }) {
+function TopNav({ tab, setTab, lowStockCount, newOrderCount, user, onLogout }) {
   const items = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "inventory", label: "Inventory", icon: Package, badge: lowStockCount },
-    { id: "orders", label: "Orders", icon: ShoppingCart },
+    { id: "orders", label: "Orders", icon: ShoppingCart, badge: newOrderCount },
     { id: "customers", label: "Customers", icon: Users },
     { id: "affiliates", label: "Affiliates", icon: TrendingUp },
   ];
