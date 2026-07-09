@@ -841,15 +841,40 @@ function Affiliates({ showToast }) {
   const [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10 });
+  const [applications, setApplications] = useState([]);
+  const [approvingId, setApprovingId] = useState(null);
 
   const pct = (r) => Math.round(Number(r) * 100);
 
   const load = async () => {
-    try { setAffiliates(await apiFetch("/api/affiliates")); }
-    catch (err) { showToast(err.message); }
+    try {
+      const [affs, apps] = await Promise.all([
+        apiFetch("/api/affiliates"),
+        apiFetch("/api/affiliate-applications"),
+      ]);
+      setAffiliates(affs);
+      setApplications(apps);
+    } catch (err) { showToast(err.message); }
     finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
+
+  const closeForm = () => { setShowForm(false); setApprovingId(null); };
+
+  // Pre-fill the New Affiliate form from an application and open it.
+  const approve = (app) => {
+    setForm({ name: app.name, email: app.email || "", code: "", discountPct: 10, commissionPct: 10 });
+    setApprovingId(app.id);
+    setShowForm(true);
+  };
+
+  const dismiss = async (app) => {
+    try {
+      await apiFetch(`/api/affiliate-applications/${app.id}/dismiss`, { method: "POST" });
+      setApplications((prev) => prev.filter((a) => a.id !== app.id));
+      showToast("Application dismissed");
+    } catch (err) { showToast(err.message); }
+  };
 
   const create = async () => {
     if (!form.name.trim()) { showToast("Name is required"); return; }
@@ -859,6 +884,11 @@ function Affiliates({ showToast }) {
         name: form.name.trim(), email: form.email.trim(), code: form.code.trim(),
         discountRate: Number(form.discountPct) / 100, commissionRate: Number(form.commissionPct) / 100,
       }});
+      // If this affiliate came from an application, clear it off the pending list.
+      if (approvingId) {
+        await apiFetch(`/api/affiliate-applications/${approvingId}/dismiss`, { method: "POST" }).catch(() => {});
+        setApprovingId(null);
+      }
       setForm({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10 });
       setShowForm(false);
       await load();
@@ -913,6 +943,35 @@ function Affiliates({ showToast }) {
         <StatCard label="Commission owed" value={money(totalOwed)} icon={DollarSign} accent="text-emerald-400" />
       </div>
 
+      {applications.length > 0 && (
+        <div className="bg-zinc-900 border border-amber-500/30 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="font-semibold">New applications</h2>
+            <span className="text-[10px] bg-amber-500 text-zinc-900 font-bold px-1.5 py-0.5 rounded-full">{applications.length}</span>
+            <span className="text-zinc-500 text-xs">— from novaflexusa.com</span>
+          </div>
+          <div className="space-y-3">
+            {applications.map((app) => (
+              <div key={app.id} className="border-t border-zinc-800 pt-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-medium truncate">{app.name}</div>
+                  <div className="text-zinc-400 text-xs truncate">{app.email}</div>
+                  {(app.platform || app.audience) && (
+                    <div className="text-zinc-500 text-xs mt-1">{[app.platform, app.audience].filter(Boolean).join(" · ")}</div>
+                  )}
+                  {app.message && <div className="text-zinc-500 text-xs mt-1 italic break-words">“{app.message}”</div>}
+                  <div className="text-[10px] text-zinc-600 mt-1">{new Date(app.createdAt).toLocaleDateString()}</div>
+                </div>
+                <div className="flex flex-col gap-1.5 shrink-0">
+                  <button onClick={() => approve(app)} className="bg-amber-500 text-zinc-900 font-semibold text-xs px-3 py-1.5 rounded hover:bg-amber-400">Approve</button>
+                  <button onClick={() => dismiss(app)} className="border border-zinc-700 text-zinc-400 text-xs px-3 py-1.5 rounded hover:bg-zinc-800">Dismiss</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-10 text-center text-zinc-500 text-sm">Loading…</div>
       ) : affiliates.length === 0 ? (
@@ -942,11 +1001,11 @@ function Affiliates({ showToast }) {
       )}
 
       {showForm && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowForm(false)}>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={closeForm}>
           <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-5 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">Add Affiliate</h3>
-              <button onClick={() => setShowForm(false)} className="text-zinc-500 hover:text-zinc-200"><X size={16} /></button>
+              <h3 className="font-semibold">{approvingId ? "Approve Affiliate" : "Add Affiliate"}</h3>
+              <button onClick={closeForm} className="text-zinc-500 hover:text-zinc-200"><X size={16} /></button>
             </div>
             <div className="space-y-3">
               <input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
@@ -962,8 +1021,8 @@ function Affiliates({ showToast }) {
               </div>
             </div>
             <div className="flex gap-2 mt-4">
-              <button onClick={() => setShowForm(false)} className="flex-1 py-2 rounded border border-zinc-700 text-sm hover:bg-zinc-800">Cancel</button>
-              <button onClick={create} disabled={busy} className="flex-1 py-2 rounded bg-amber-500 text-zinc-900 font-semibold text-sm hover:bg-amber-400 disabled:opacity-50">{busy ? "Creating…" : "Create"}</button>
+              <button onClick={closeForm} className="flex-1 py-2 rounded border border-zinc-700 text-sm hover:bg-zinc-800">Cancel</button>
+              <button onClick={create} disabled={busy} className="flex-1 py-2 rounded bg-amber-500 text-zinc-900 font-semibold text-sm hover:bg-amber-400 disabled:opacity-50">{busy ? "Creating…" : (approvingId ? "Create & approve" : "Create")}</button>
             </div>
           </div>
         </div>
