@@ -638,6 +638,7 @@ function NewOrderModal({ products, customers, onClose, onCreate }) {
   const [customerId, setCustomerId] = useState("");
   const [newCustomerName, setNewCustomerName] = useState("");
   const [lines, setLines] = useState([{ productId: "", qty: 1 }]);
+  const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -663,6 +664,7 @@ function NewOrderModal({ products, customers, onClose, onCreate }) {
         customerId: customerId || undefined,
         customerName: !customerId ? newCustomerName.trim() : undefined,
         items: validLines.map((l) => ({ productId: l.productId, qty: l.qty })),
+        code: code.trim() || undefined,
       });
     } catch (err) {
       setError(err.message);
@@ -707,6 +709,10 @@ function NewOrderModal({ products, customers, onClose, onCreate }) {
           })}
         </div>
         <button onClick={addLine} className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1 mb-4"><Plus size={12} /> Add another item</button>
+        <label className="text-xs text-zinc-500 uppercase tracking-wide font-mono block mb-1">Affiliate / promo code (optional)</label>
+        <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="e.g. SARAH10"
+          className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm mb-1 font-mono uppercase focus:outline-none focus:border-amber-500" />
+        <p className="text-[11px] text-zinc-500 mb-4">Applies the affiliate's discount to this sale and credits their commission.</p>
         <div className="bg-zinc-950 border border-zinc-800 rounded p-3 mb-3 flex justify-between text-sm">
           <div><div className="text-zinc-500 text-xs">Order Total</div><div className="font-mono font-semibold">{money(total)}</div></div>
           <div className="text-right"><div className="text-zinc-500 text-xs">Profit</div><div className="font-mono font-semibold text-green-400">{money(profit)}</div></div>
