@@ -676,8 +676,20 @@ function Orders({ products, customers, orders, refreshAll, showToast }) {
               {sorted.map((o) => (
                 <tr key={o.id} className="border-t border-zinc-800">
                   <td className="px-4 py-2.5 text-zinc-400">{new Date(o.createdAt).toLocaleDateString()}</td>
-                  <td className="px-4 py-2.5 font-medium">{o.customer?.name}</td>
-                  <td className="px-4 py-2.5 text-zinc-400 text-xs">{o.items.map((i) => `${i.name} ×${i.qty}`).join(", ")}</td>
+                  <td className="px-4 py-2.5 font-medium">
+                    {o.customer?.name}
+                    {o.shipLine1 && (
+                      <div className="text-[11px] text-zinc-500 font-normal mt-0.5 leading-tight">
+                        ✦ {o.shipName ? o.shipName + " · " : ""}{o.shipLine1}{o.shipLine2 ? ", " + o.shipLine2 : ""}, {o.shipCity}, {o.shipState} {o.shipPostal}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 text-zinc-400 text-xs">
+                    {o.items.map((i) => `${i.name} ×${i.qty}`).join(", ")}
+                    {(Number(o.shippingFee) > 0 || Number(o.taxAmount) > 0) && (
+                      <div className="text-[10px] text-zinc-600 mt-0.5">+ ship {money(Number(o.shippingFee)||0)} · tax {money(Number(o.taxAmount)||0)}</div>
+                    )}
+                  </td>
                   <td className="px-4 py-2.5 text-center">
                     <span className={`text-xs px-2 py-0.5 rounded font-mono ${o.status === "paid" ? "bg-green-900/40 text-green-300" : o.status === "pending" ? "bg-amber-900/40 text-amber-300" : "bg-zinc-800 text-zinc-400"}`}>{o.status}</span>
                   </td>
