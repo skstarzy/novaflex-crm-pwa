@@ -1046,11 +1046,11 @@ function Affiliates({ showToast }) {
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10 });
+  const [form, setForm] = useState({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10, expiresAt: "" });
   const [applications, setApplications] = useState([]);
   const [approvingId, setApprovingId] = useState(null);
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10 });
+  const [editForm, setEditForm] = useState({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10, expiresAt: "" });
   const [savingEdit, setSavingEdit] = useState(false);
 
   const pct = (r) => Math.round(Number(r) * 100);
@@ -1092,13 +1092,14 @@ function Affiliates({ showToast }) {
       await apiFetch("/api/affiliates", { method: "POST", body: {
         name: form.name.trim(), email: form.email.trim(), code: form.code.trim(),
         discountRate: Number(form.discountPct) / 100, commissionRate: Number(form.commissionPct) / 100,
+        expiresAt: form.expiresAt || null,
       }});
       // If this affiliate came from an application, clear it off the pending list.
       if (approvingId) {
         await apiFetch(`/api/affiliate-applications/${approvingId}/dismiss`, { method: "POST" }).catch(() => {});
         setApprovingId(null);
       }
-      setForm({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10 });
+      setForm({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10, expiresAt: "" });
       setShowForm(false);
       await load();
       showToast("Affiliate created");
@@ -1114,7 +1115,8 @@ function Affiliates({ showToast }) {
   const closeDetail = () => { setSelected(null); setEditing(false); };
 
   const startEdit = (a) => {
-    setEditForm({ name: a.name, email: a.email || "", code: a.code, discountPct: pct(a.discountRate), commissionPct: pct(a.commissionRate) });
+    setEditForm({ name: a.name, email: a.email || "", code: a.code, discountPct: pct(a.discountRate), commissionPct: pct(a.commissionRate),
+      expiresAt: a.expiresAt ? new Date(a.expiresAt).toISOString().slice(0, 10) : "" });
     setEditing(true);
   };
 
@@ -1125,6 +1127,7 @@ function Affiliates({ showToast }) {
       await apiFetch(`/api/affiliates/${selected.id}`, { method: "PATCH", body: {
         name: editForm.name.trim(), email: editForm.email.trim(), code: editForm.code.trim(),
         discountRate: Number(editForm.discountPct) / 100, commissionRate: Number(editForm.commissionPct) / 100,
+        expiresAt: editForm.expiresAt || null,
       }});
       setEditing(false);
       await load();
@@ -1261,6 +1264,10 @@ function Affiliates({ showToast }) {
                   <input type="number" min="0" max="100" value={form.commissionPct} onChange={(e) => setForm({ ...form, commissionPct: e.target.value })} className="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
                 </label>
               </div>
+              <label className="block text-xs text-zinc-400">Runs until (optional)
+                <input type="date" value={form.expiresAt} onChange={(e) => setForm({ ...form, expiresAt: e.target.value })} className="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
+                <span className="text-[11px] text-zinc-500 block mt-1">Works through the end of this day, then stops accepting. Blank = runs indefinitely.</span>
+              </label>
             </div>
             <div className="flex gap-2 mt-4">
               <button onClick={closeForm} className="flex-1 py-2 rounded border border-zinc-700 text-sm hover:bg-zinc-800">Cancel</button>
@@ -1300,6 +1307,11 @@ function Affiliates({ showToast }) {
                     <input type="number" min="0" max="100" value={editForm.commissionPct} onChange={(e) => setEditForm({ ...editForm, commissionPct: e.target.value })} className="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
                   </label>
                 </div>
+                <div>
+                  <label className="text-xs text-zinc-500 uppercase tracking-wide font-mono block mb-1">Runs until</label>
+                  <input type="date" value={editForm.expiresAt} onChange={(e) => setEditForm({ ...editForm, expiresAt: e.target.value })} className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
+                  <span className="text-[11px] text-zinc-500 block mt-1">Blank = no end date. Clearing this makes the code run indefinitely.</span>
+                </div>
                 <div className="flex gap-2 pt-1">
                   <button onClick={() => setEditing(false)} className="flex-1 py-2 rounded border border-zinc-700 text-sm hover:bg-zinc-800">Cancel</button>
                   <button onClick={saveEdit} disabled={savingEdit} className="flex-1 py-2 rounded bg-amber-500 text-zinc-900 font-semibold text-sm hover:bg-amber-400 disabled:opacity-50">{savingEdit ? "Saving…" : "Save changes"}</button>
@@ -1311,6 +1323,11 @@ function Affiliates({ showToast }) {
                 <div className="flex items-center gap-2 mt-3 flex-wrap">
                   <button onClick={() => copyCode(selected.code)} className="inline-flex items-center gap-1.5 bg-zinc-950 border border-zinc-700 rounded px-2.5 py-1 font-mono text-sm text-amber-400 hover:border-amber-500">{selected.code}</button>
                   <span className="text-xs text-zinc-500">{pct(selected.discountRate)}% off · {pct(selected.commissionRate)}% commission</span>
+                  {selected.expiresAt && (
+                    new Date(selected.expiresAt) < new Date()
+                      ? <span className="text-xs px-2 py-0.5 rounded bg-red-900/40 text-red-300">Expired {new Date(selected.expiresAt).toLocaleDateString()}</span>
+                      : <span className="text-xs px-2 py-0.5 rounded bg-amber-900/40 text-amber-300">Runs until {new Date(selected.expiresAt).toLocaleDateString()}</span>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2 mt-4">
                   <button onClick={() => startEdit(selected)} className="flex-1 min-w-[130px] py-2 rounded border border-amber-500/50 text-amber-400 text-sm hover:bg-amber-500/10">Edit rates / details</button>
