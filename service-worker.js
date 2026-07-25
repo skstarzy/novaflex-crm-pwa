@@ -5,7 +5,7 @@
 // offline-capable *shell*, which is what actually matters for a tool
 // where stale inventory numbers would be actively dangerous to trust.
 
-const CACHE_NAME = 'novaflex-crm-shell-v1';
+const CACHE_NAME = 'novaflex-crm-shell-v2';
 const SHELL_FILES = [
   './',
   './index.html',
@@ -39,6 +39,17 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/api')) return;
 
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    caches.match(event.request).then((cached) => {
+      const fresh = fetch(event.request)
+        .then((res) => {
+          if (res && res.status === 200 && res.type === 'basic') {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((c) => c.put(event.request, copy));
+          }
+          return res;
+        })
+        .catch(() => cached); // offline: fall back to whatever we have
+      return cached || fresh;
+    })
   );
 });
