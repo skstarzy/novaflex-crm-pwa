@@ -28,10 +28,41 @@
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-track { background: #18181b; }
   ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
+
+  /* ---- Shipping labels ----
+     Labels are 4x6in, the standard thermal-printer size, and also print fine
+     centered on Letter. When printing we hide the whole app and show only the
+     label sheet, so the operator gets labels and nothing else — no nav, no
+     table, no dark background eating a toner cartridge. */
+  #labelSheet { display: none; }
+
+  @media print {
+    @page { size: 4in 6in; margin: 0; }
+    html, body { background: #fff !important; margin: 0; padding: 0; }
+    body > #root { display: none !important; }
+    #labelSheet {
+      display: block !important;
+      position: static;
+      background: #fff;
+      color: #000;
+    }
+    .ship-label {
+      width: 4in; height: 6in;
+      padding: 0.28in 0.3in;
+      box-sizing: border-box;
+      page-break-after: always;
+      break-after: page;
+      display: flex; flex-direction: column;
+      font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+      color: #000;
+    }
+    .ship-label:last-child { page-break-after: auto; break-after: auto; }
+  }
 </style>
 </head>
 <body>
   <div id="root"></div>
+  <div id="labelSheet"></div>
 
   <!-- App configuration: the only thing you need to change per environment -->
   <script>

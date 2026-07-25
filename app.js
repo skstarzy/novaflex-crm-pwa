@@ -606,6 +606,96 @@ function ReceiveShipmentModal({ products, onClose, onReceive }) {
   );
 }
 
+
+// ---------------------------------------------------------------------------
+// Shipping labels
+//
+// Order rows carry the ship-to address captured at checkout (shipName,
+// shipLine1/2, shipCity, shipState, shipPostal). The CRM showed it as one dim
+// 11px line under the customer name, which is unusable for actually packing a
+// box — hence a real 4x6 label, the standard thermal size.
+//
+// Labels render into #labelSheet, which lives OUTSIDE #root so React never
+// re-renders over it mid-print, and is hidden on screen / shown only in print.
+// ---------------------------------------------------------------------------
+
+const SHIP_FROM = {
+  name: "NovaFlex Peptides",
+  line1: "300 Westerman Place",
+  city: "Smithfield", state: "NC", postal: "27577",
+  phone: "(919) 333-7234",
+};
+
+function hasAddress(o) {
+  return !!(o && o.shipLine1 && o.shipCity && o.shipState && o.shipPostal);
+}
+
+function addressLines(o) {
+  if (!hasAddress(o)) return [];
+  const l = [];
+  if (o.shipName) l.push(o.shipName);
+  l.push(o.shipLine1);
+  if (o.shipLine2) l.push(o.shipLine2);
+  l.push(`${o.shipCity}, ${o.shipState} ${o.shipPostal}`);
+  if (o.shipCountry && o.shipCountry !== "US") l.push(o.shipCountry);
+  return l;
+}
+
+function labelHTML(o) {
+  const esc = (v) => String(v == null ? "" : v).replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const to = addressLines(o).map(
+    (t, i) => `<div style="font-size:${i === 0 ? "17pt" : "15pt"};font-weight:${i === 0 ? 700 : 500};line-height:1.32;">${esc(t)}</div>`
+  ).join("");
+  const items = (o.items || []).map(
+    (i) => `<div style="display:flex;justify-content:space-between;font-size:8.5pt;line-height:1.5;">
+              <span>${esc(i.name)}</span><span>x${esc(i.qty)}</span></div>`
+  ).join("");
+  const ref = String(o.id).slice(-8).toUpperCase();
+  const date = new Date(o.createdAt).toLocaleDateString();
+
+  return `<div class="ship-label">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #000;padding-bottom:7px;">
+      <div>
+        <div style="font-size:13pt;font-weight:800;letter-spacing:-0.3px;">NOVAFLEX</div>
+        <div style="font-size:6.5pt;letter-spacing:1.6px;margin-top:1px;">PEPTIDES</div>
+      </div>
+      <div style="text-align:right;font-size:7.5pt;line-height:1.45;">
+        <div>ORDER ${esc(ref)}</div><div>${esc(date)}</div>
+      </div>
+    </div>
+
+    <div style="font-size:7pt;letter-spacing:1.3px;margin-top:11px;">FROM</div>
+    <div style="font-size:8.5pt;line-height:1.4;margin-top:2px;">
+      ${esc(SHIP_FROM.name)}<br>${esc(SHIP_FROM.line1)}<br>
+      ${esc(SHIP_FROM.city)}, ${esc(SHIP_FROM.state)} ${esc(SHIP_FROM.postal)}<br>${esc(SHIP_FROM.phone)}
+    </div>
+
+    <div style="font-size:7pt;letter-spacing:1.3px;margin-top:15px;">SHIP TO</div>
+    <div style="border:2px solid #000;padding:11px 12px;margin-top:4px;">${to}</div>
+
+    <div style="font-size:7pt;letter-spacing:1.3px;margin-top:15px;">CONTENTS</div>
+    <div style="border-top:1px solid #000;margin-top:3px;padding-top:5px;">${items}</div>
+
+    <div style="margin-top:auto;border-top:1px solid #000;padding-top:7px;font-size:6.5pt;line-height:1.45;">
+      <b>FOR RESEARCH USE ONLY — NOT FOR HUMAN OR VETERINARY USE.</b>
+      Not drugs, foods, or cosmetics. Sales restricted to qualified researchers, 21+.
+    </div>
+  </div>`;
+}
+
+// Render label(s) into the print-only container and open the print dialog.
+function printLabels(orders) {
+  const list = orders.filter(hasAddress);
+  if (!list.length) return 0;
+  const sheet = document.getElementById("labelSheet");
+  sheet.innerHTML = list.map(labelHTML).join("");
+  const cleanup = () => { sheet.innerHTML = ""; window.removeEventListener("afterprint", cleanup); };
+  window.addEventListener("afterprint", cleanup);
+  window.print();
+  return list.length;
+}
+
 function Orders({ products, customers, orders, refreshAll, showToast }) {
   const [showForm, setShowForm] = useState(false);
 
@@ -622,9 +712,11 @@ function Orders({ products, customers, orders, refreshAll, showToast }) {
   };
 
   const exportCSV = () => {
-    const rows = [["Date", "Customer", "Items", "Total", "Profit", "Status"]];
+    const rows = [["Date", "Customer", "Items", "Total", "Profit", "Status",
+                   "Ship Name", "Address 1", "Address 2", "City", "State", "ZIP", "Country"]];
     [...orders].sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt)).forEach((o) =>
-      rows.push([new Date(o.createdAt).toLocaleDateString(), o.customer?.name, o.items.map(i=>`${i.name} x${i.qty}`).join("; "), o.total, o.profit, o.status])
+      rows.push([new Date(o.createdAt).toLocaleDateString(), o.customer?.name, o.items.map(i=>`${i.name} x${i.qty}`).join("; "), o.total, o.profit, o.status,
+                 o.shipName || "", o.shipLine1 || "", o.shipLine2 || "", o.shipCity || "", o.shipState || "", o.shipPostal || "", o.shipCountry || ""])
     );
     const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -637,6 +729,16 @@ function Orders({ products, customers, orders, refreshAll, showToast }) {
   };
 
   const sorted = [...orders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const paidWithAddress = sorted.filter((o) => o.status === "paid" && hasAddress(o));
+  const missingAddress = sorted.filter((o) => o.status === "paid" && !hasAddress(o));
+
+  const printOne = (o) => {
+    if (!printLabels([o])) showToast("That order has no shipping address on file.");
+  };
+  const printAllPaid = () => {
+    const n = printLabels(paidWithAddress);
+    showToast(n ? `Printing ${n} label${n !== 1 ? "s" : ""}` : "No paid orders with an address.");
+  };
 
   return (
     <div className="space-y-4">
@@ -646,6 +748,11 @@ function Orders({ products, customers, orders, refreshAll, showToast }) {
           <p className="text-zinc-500 text-sm mt-0.5">{orders.length} order{orders.length !== 1 ? "s" : ""} recorded.</p>
         </div>
         <div className="flex items-center gap-2">
+          {paidWithAddress.length > 0 && (
+            <button onClick={printAllPaid} className="flex items-center gap-1.5 border border-zinc-700 text-zinc-300 text-sm px-3 py-2 rounded hover:border-amber-500 hover:text-amber-400 whitespace-nowrap">
+              <Printer size={14} /> Print {paidWithAddress.length} label{paidWithAddress.length !== 1 ? "s" : ""}
+            </button>
+          )}
           {orders.length > 0 && (
             <button onClick={exportCSV} className="flex items-center gap-1.5 border border-zinc-700 text-zinc-300 text-sm px-3 py-2 rounded hover:border-amber-500 hover:text-amber-400">
               <Download size={14} /> Export CSV
@@ -657,6 +764,13 @@ function Orders({ products, customers, orders, refreshAll, showToast }) {
         </div>
       </div>
 
+      {missingAddress.length > 0 && (
+        <div className="bg-red-950/40 border border-red-900/60 rounded-lg px-4 py-3 text-sm text-red-300">
+          <b>{missingAddress.length} paid order{missingAddress.length !== 1 ? "s have" : " has"} no shipping address.</b>{" "}
+          These cannot be labeled or shipped — contact the customer for an address.
+        </div>
+      )}
+
       {sorted.length === 0 ? (
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-10 text-center text-zinc-500 text-sm">No orders yet. Click "New Order" to record your first sale.</div>
       ) : (
@@ -666,10 +780,12 @@ function Orders({ products, customers, orders, refreshAll, showToast }) {
               <tr className="bg-zinc-800/60 text-zinc-400 text-xs uppercase tracking-wide">
                 <th className="text-left px-4 py-2.5 font-medium">Date</th>
                 <th className="text-left px-4 py-2.5 font-medium">Customer</th>
+                <th className="text-left px-4 py-2.5 font-medium">Ship to</th>
                 <th className="text-left px-4 py-2.5 font-medium">Items</th>
                 <th className="text-center px-4 py-2.5 font-medium">Status</th>
                 <th className="text-right px-4 py-2.5 font-medium">Total</th>
                 <th className="text-right px-4 py-2.5 font-medium">Profit</th>
+                <th className="text-center px-4 py-2.5 font-medium">Label</th>
               </tr>
             </thead>
             <tbody>
@@ -678,10 +794,19 @@ function Orders({ products, customers, orders, refreshAll, showToast }) {
                   <td className="px-4 py-2.5 text-zinc-400">{new Date(o.createdAt).toLocaleDateString()}</td>
                   <td className="px-4 py-2.5 font-medium">
                     {o.customer?.name}
-                    {o.shipLine1 && (
-                      <div className="text-[11px] text-zinc-500 font-normal mt-0.5 leading-tight">
-                        ✦ {o.shipName ? o.shipName + " · " : ""}{o.shipLine1}{o.shipLine2 ? ", " + o.shipLine2 : ""}, {o.shipCity}, {o.shipState} {o.shipPostal}
+                    {o.customer?.email && <div className="text-[11px] text-zinc-500 font-normal mt-0.5">{o.customer.email}</div>}
+                  </td>
+                  <td className="px-4 py-2.5 text-xs leading-snug">
+                    {hasAddress(o) ? (
+                      <div className="text-zinc-300">
+                        {o.shipName && <div className="font-medium">{o.shipName}</div>}
+                        <div className="text-zinc-400">{o.shipLine1}{o.shipLine2 ? ", " + o.shipLine2 : ""}</div>
+                        <div className="text-zinc-400">{o.shipCity}, {o.shipState} {o.shipPostal}</div>
                       </div>
+                    ) : o.status === "paid" ? (
+                      <span className="text-red-400 font-medium">⚠ No address — cannot ship</span>
+                    ) : (
+                      <span className="text-zinc-600">—</span>
                     )}
                   </td>
                   <td className="px-4 py-2.5 text-zinc-400 text-xs">
@@ -695,6 +820,14 @@ function Orders({ products, customers, orders, refreshAll, showToast }) {
                   </td>
                   <td className="px-4 py-2.5 text-right font-mono">{money(o.total)}</td>
                   <td className="px-4 py-2.5 text-right font-mono text-green-400">{money(o.profit)}</td>
+                  <td className="px-4 py-2.5 text-center">
+                    {hasAddress(o) ? (
+                      <button onClick={() => printOne(o)} title="Print 4x6 shipping label"
+                        className="text-zinc-400 hover:text-amber-400 p-1 rounded hover:bg-zinc-800">
+                        <Printer size={15} />
+                      </button>
+                    ) : <span className="text-zinc-700 text-xs">—</span>}
+                  </td>
                 </tr>
               ))}
             </tbody>
