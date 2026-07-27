@@ -644,42 +644,75 @@ function addressLines(o) {
 function labelHTML(o) {
   const esc = (v) => String(v == null ? "" : v).replace(/[&<>"]/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  // Ship-to is the one block a carrier actually reads, so it stays the largest
+  // thing on the label and nothing decorative goes near it.
   const to = addressLines(o).map(
-    (t, i) => `<div style="font-size:${i === 0 ? "17pt" : "15pt"};font-weight:${i === 0 ? 700 : 500};line-height:1.32;">${esc(t)}</div>`
+    (t, i) => `<div style="font-size:${i === 0 ? "16.5pt" : "15pt"};font-weight:${i === 0 ? 700 : 500};line-height:1.34;">${esc(t)}</div>`
   ).join("");
+
   const items = (o.items || []).map(
-    (i) => `<div style="display:flex;justify-content:space-between;font-size:8.5pt;line-height:1.5;">
-              <span>${esc(i.name)}</span><span>x${esc(i.qty)}</span></div>`
+    (i) => `<tr>
+      <td style="font-size:8.5pt;line-height:1.5;padding:1.5pt 0;">${esc(i.name)}</td>
+      <td style="font-size:8.5pt;line-height:1.5;padding:1.5pt 0;text-align:right;white-space:nowrap;">&times;&nbsp;${esc(i.qty)}</td>
+    </tr>`
   ).join("");
+  const count = (o.items || []).reduce((n, i) => n + (Number(i.qty) || 0), 0);
+
   const ref = String(o.id).slice(-8).toUpperCase();
-  const date = new Date(o.createdAt).toLocaleDateString();
+  const d = new Date(o.createdAt);
+  const date = d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 
+  // Everything is pure black on white: thermal label printers are monochrome,
+  // so any colour would come out as unpredictable grey.
   return `<div class="ship-label">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #000;padding-bottom:7px;">
+
+    <div style="background:#000;color:#fff;margin:-0.28in -0.3in 0;padding:9pt 0.3in 8pt;
+                display:flex;justify-content:space-between;align-items:center;">
       <div>
-        <div style="font-size:13pt;font-weight:800;letter-spacing:-0.3px;">NOVAFLEX</div>
-        <div style="font-size:6.5pt;letter-spacing:1.6px;margin-top:1px;">PEPTIDES</div>
+        <div style="font-size:15pt;font-weight:800;letter-spacing:-0.4px;line-height:1;">NOVAFLEX</div>
+        <div style="font-size:6.5pt;letter-spacing:2.4px;margin-top:2.5pt;">P E P T I D E S</div>
       </div>
-      <div style="text-align:right;font-size:7.5pt;line-height:1.45;">
-        <div>ORDER ${esc(ref)}</div><div>${esc(date)}</div>
+      <div style="text-align:right;font-size:7pt;line-height:1.5;letter-spacing:.4px;">
+        <div style="opacity:.75;">ORDER</div>
+        <div style="font-size:9.5pt;font-weight:700;letter-spacing:.6px;">${esc(ref)}</div>
+        <div style="opacity:.75;margin-top:1pt;">${esc(date)}</div>
       </div>
     </div>
 
-    <div style="font-size:7pt;letter-spacing:1.3px;margin-top:11px;">FROM</div>
-    <div style="font-size:8.5pt;line-height:1.4;margin-top:2px;">
-      ${esc(SHIP_FROM.name)}<br>${esc(SHIP_FROM.line1)}<br>
-      ${esc(SHIP_FROM.city)}, ${esc(SHIP_FROM.state)} ${esc(SHIP_FROM.postal)}<br>${esc(SHIP_FROM.phone)}
+    <div style="display:flex;gap:14pt;margin-top:11pt;">
+      <div style="flex:1;">
+        <div style="font-size:6.5pt;letter-spacing:1.4px;font-weight:700;">FROM</div>
+        <div style="font-size:8pt;line-height:1.45;margin-top:2pt;">
+          ${esc(SHIP_FROM.name)}<br>${esc(SHIP_FROM.line1)}<br>
+          ${esc(SHIP_FROM.city)}, ${esc(SHIP_FROM.state)} ${esc(SHIP_FROM.postal)}<br>${esc(SHIP_FROM.phone)}
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:6.5pt;letter-spacing:1.4px;font-weight:700;">ITEMS</div>
+        <div style="font-size:19pt;font-weight:800;line-height:1;margin-top:2pt;">${count}</div>
+      </div>
     </div>
 
-    <div style="font-size:7pt;letter-spacing:1.3px;margin-top:15px;">SHIP TO</div>
-    <div style="border:2px solid #000;padding:11px 12px;margin-top:4px;">${to}</div>
+    <div style="font-size:6.5pt;letter-spacing:1.4px;font-weight:700;margin-top:13pt;">SHIP TO</div>
+    <div style="border:2.5pt solid #000;padding:12pt 12pt 13pt;margin-top:4pt;">${to}</div>
 
-    <div style="font-size:7pt;letter-spacing:1.3px;margin-top:15px;">CONTENTS</div>
-    <div style="border-top:1px solid #000;margin-top:3px;padding-top:5px;">${items}</div>
+    <div style="font-size:6.5pt;letter-spacing:1.4px;font-weight:700;margin-top:13pt;">PACKING LIST</div>
+    <table style="width:100%;border-collapse:collapse;border-top:1pt solid #000;margin-top:3pt;padding-top:3pt;">
+      ${items}
+    </table>
 
-    <div style="margin-top:auto;border-top:1px solid #000;padding-top:7px;font-size:6.5pt;line-height:1.45;">
-      <b>FOR RESEARCH USE ONLY — NOT FOR HUMAN OR VETERINARY USE.</b>
-      Not drugs, foods, or cosmetics. Sales restricted to qualified researchers, 21+.
+    <div style="margin-top:auto;">
+      <div style="border-top:1pt solid #000;padding-top:8pt;text-align:center;">
+        <div style="font-size:9pt;font-weight:700;letter-spacing:.2px;">Thank you for choosing NovaFlex</div>
+        <div style="font-size:7.5pt;line-height:1.45;margin-top:2pt;">
+          Questions about this shipment? support@novaflexusa.com
+        </div>
+      </div>
+      <div style="border-top:1pt solid #000;margin-top:8pt;padding-top:6pt;font-size:6pt;line-height:1.45;">
+        <b>FOR RESEARCH USE ONLY \u2014 NOT FOR HUMAN OR VETERINARY USE.</b>
+        Not drugs, foods, or cosmetics. Sales restricted to qualified researchers, 21+.
+      </div>
     </div>
   </div>`;
 }
@@ -822,9 +855,9 @@ function Orders({ products, customers, orders, refreshAll, showToast }) {
                   <td className="px-4 py-2.5 text-right font-mono text-green-400">{money(o.profit)}</td>
                   <td className="px-4 py-2.5 text-center">
                     {hasAddress(o) ? (
-                      <button onClick={() => printOne(o)} title="Print 4x6 shipping label"
-                        className="text-zinc-400 hover:text-amber-400 p-1 rounded hover:bg-zinc-800">
-                        <Printer size={15} />
+                      <button onClick={() => printOne(o)} title="Print a 4x6 shipping label for this order"
+                        className="inline-flex items-center gap-1.5 border border-zinc-700 text-zinc-300 text-xs font-medium px-2.5 py-1.5 rounded hover:border-amber-500 hover:text-amber-400 whitespace-nowrap">
+                        <Printer size={13} /> Print label
                       </button>
                     ) : <span className="text-zinc-700 text-xs">—</span>}
                   </td>
