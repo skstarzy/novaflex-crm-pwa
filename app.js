@@ -621,8 +621,8 @@ function ReceiveShipmentModal({ products, onClose, onReceive }) {
 
 const SHIP_FROM = {
   name: "NovaFlex Peptides",
-  line1: "300 Westerman Place",
-  city: "Smithfield", state: "NC", postal: "27577",
+  line1: "120 N. Tech Dr., Suite 102",
+  city: "Clayton", state: "NC", postal: "27520",
   phone: "(919) 333-7234",
 };
 
