@@ -641,6 +641,14 @@ function addressLines(o) {
   return l;
 }
 
+// Kept out of addressLines() on purpose. The carrier wants a contact number,
+// but it is not part of the deliverable address — mixing it in would set it at
+// address size in the SHIP TO box and push a four-line address onto five,
+// which is what makes a 4x6 overflow. It gets its own line, smaller, below.
+function shipPhone(o) {
+  return (o && o.shipPhone) ? String(o.shipPhone) : "";
+}
+
 function labelHTML(o) {
   const esc = (v) => String(v == null ? "" : v).replace(/[&<>"]/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -695,7 +703,11 @@ function labelHTML(o) {
     </div>
 
     <div style="font-size:6.5pt;letter-spacing:1.4px;font-weight:700;margin-top:13pt;">SHIP TO</div>
-    <div style="border:2.5pt solid #000;padding:12pt 12pt 13pt;margin-top:4pt;">${to}</div>
+    <div style="border:2.5pt solid #000;padding:12pt 12pt 13pt;margin-top:4pt;">${to}${
+      shipPhone(o)
+        ? `<div style="font-size:10.5pt;font-weight:600;margin-top:6pt;letter-spacing:.2px;">TEL ${esc(shipPhone(o))}</div>`
+        : ""
+    }</div>
 
     <div style="font-size:6.5pt;letter-spacing:1.4px;font-weight:700;margin-top:13pt;">PACKING LIST</div>
     <table style="width:100%;border-collapse:collapse;border-top:1pt solid #000;margin-top:3pt;padding-top:3pt;">
@@ -746,10 +758,10 @@ function Orders({ products, customers, orders, refreshAll, showToast }) {
 
   const exportCSV = () => {
     const rows = [["Date", "Customer", "Items", "Total", "Profit", "Status",
-                   "Ship Name", "Address 1", "Address 2", "City", "State", "ZIP", "Country"]];
+                   "Ship Name", "Address 1", "Address 2", "City", "State", "ZIP", "Country", "Phone"]];
     [...orders].sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt)).forEach((o) =>
       rows.push([new Date(o.createdAt).toLocaleDateString(), o.customer?.name, o.items.map(i=>`${i.name} x${i.qty}`).join("; "), o.total, o.profit, o.status,
-                 o.shipName || "", o.shipLine1 || "", o.shipLine2 || "", o.shipCity || "", o.shipState || "", o.shipPostal || "", o.shipCountry || ""])
+                 o.shipName || "", o.shipLine1 || "", o.shipLine2 || "", o.shipCity || "", o.shipState || "", o.shipPostal || "", o.shipCountry || "", o.shipPhone || ""])
     );
     const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -835,6 +847,9 @@ function Orders({ products, customers, orders, refreshAll, showToast }) {
                         {o.shipName && <div className="font-medium">{o.shipName}</div>}
                         <div className="text-zinc-400">{o.shipLine1}{o.shipLine2 ? ", " + o.shipLine2 : ""}</div>
                         <div className="text-zinc-400">{o.shipCity}, {o.shipState} {o.shipPostal}</div>
+                        {o.shipPhone
+                          ? <div className="text-zinc-500 mt-0.5">{o.shipPhone}</div>
+                          : <div className="text-amber-500/80 mt-0.5">No phone — carrier may reject</div>}
                       </div>
                     ) : o.status === "paid" ? (
                       <span className="text-red-400 font-medium">⚠ No address — cannot ship</span>
