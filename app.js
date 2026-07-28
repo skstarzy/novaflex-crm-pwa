@@ -759,7 +759,9 @@ function Orders({ products, customers, orders, refreshAll, showToast }) {
   const exportCSV = () => {
     const rows = [["Date", "Customer", "Items", "Total", "Profit", "Status",
                    "Ship Name", "Address 1", "Address 2", "City", "State", "ZIP", "Country", "Phone"]];
-    [...orders].sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt)).forEach((o) =>
+    // Follows what's on screen. A spreadsheet called "orders" that quietly
+    // includes unpaid checkouts overstates the business to whoever opens it.
+    sorted.forEach((o) =>
       rows.push([new Date(o.createdAt).toLocaleDateString(), o.customer?.name, o.items.map(i=>`${i.name} x${i.qty}`).join("; "), o.total, o.profit, o.status,
                  o.shipName || "", o.shipLine1 || "", o.shipLine2 || "", o.shipCity || "", o.shipState || "", o.shipPostal || "", o.shipCountry || "", o.shipPhone || ""])
     );
@@ -773,9 +775,22 @@ function Orders({ products, customers, orders, refreshAll, showToast }) {
     showToast("Orders exported");
   };
 
-  const sorted = [...orders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  const paidWithAddress = sorted.filter((o) => o.status === "paid" && hasAddress(o));
-  const missingAddress = sorted.filter((o) => o.status === "paid" && !hasAddress(o));
+  // A "pending" row is not a sale — it's someone who reached the payment step
+  // and hasn't paid. Most never will. Listing them alongside real orders makes
+  // the Orders tab a worklist of things that mostly don't need doing, and makes
+  // the order count read higher than the business actually did.
+  //
+  // They are hidden, not deleted. The row holds the resumable payment session
+  // the recovery email links back to, so deleting it would break the buyer's
+  // own "finish your order" link and strand anyone mid-checkout. The toggle
+  // keeps them reachable for anyone who wants to see what's outstanding.
+  const [showPending, setShowPending] = useState(false);
+
+  const all = [...orders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const pendingCount = all.filter((o) => o.status !== "paid").length;
+  const sorted = showPending ? all : all.filter((o) => o.status === "paid");
+  const paidWithAddress = all.filter((o) => o.status === "paid" && hasAddress(o));
+  const missingAddress = all.filter((o) => o.status === "paid" && !hasAddress(o));
 
   const printOne = (o) => {
     if (!printLabels([o])) showToast("That order has no shipping address on file.");
@@ -790,7 +805,14 @@ function Orders({ products, customers, orders, refreshAll, showToast }) {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold">Orders</h1>
-          <p className="text-zinc-500 text-sm mt-0.5">{orders.length} order{orders.length !== 1 ? "s" : ""} recorded.</p>
+          <p className="text-zinc-500 text-sm mt-0.5">
+            {paidWithAddress.length + missingAddress.length} paid order{(paidWithAddress.length + missingAddress.length) !== 1 ? "s" : ""}.
+            {pendingCount > 0 && (
+              <button onClick={() => setShowPending((v) => !v)} className="ml-2 text-amber-500/80 hover:text-amber-400 underline underline-offset-2">
+                {showPending ? "Hide" : "Show"} {pendingCount} unpaid
+              </button>
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {paidWithAddress.length > 0 && (
@@ -817,7 +839,11 @@ function Orders({ products, customers, orders, refreshAll, showToast }) {
       )}
 
       {sorted.length === 0 ? (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-10 text-center text-zinc-500 text-sm">No orders yet. Click "New Order" to record your first sale.</div>
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-10 text-center text-zinc-500 text-sm">
+          {pendingCount > 0 && !showPending
+            ? `No paid orders yet — ${pendingCount} checkout${pendingCount !== 1 ? "s are" : " is"} still unpaid.`
+            : 'No orders yet. Click "New Order" to record your first sale.'}
+        </div>
       ) : (
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
           <table className="w-full text-sm">
