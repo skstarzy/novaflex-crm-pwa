@@ -5,7 +5,7 @@
 // offline-capable *shell*, which is what actually matters for a tool
 // where stale inventory numbers would be actively dangerous to trust.
 
-const CACHE_NAME = 'novaflex-crm-shell-v7';
+const CACHE_NAME = 'novaflex-crm-shell-v8';
 const SHELL_FILES = [
   './',
   './index.html',

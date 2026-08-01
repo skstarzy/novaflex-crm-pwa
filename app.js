@@ -1120,11 +1120,11 @@ function Affiliates({ showToast }) {
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10, expiresAt: "" });
+  const [form, setForm] = useState({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10, stackPct: "", expiresAt: "" });
   const [applications, setApplications] = useState([]);
   const [approvingId, setApprovingId] = useState(null);
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10, expiresAt: "" });
+  const [editForm, setEditForm] = useState({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10, stackPct: "", expiresAt: "" });
   const [savingEdit, setSavingEdit] = useState(false);
 
   const pct = (r) => Math.round(Number(r) * 100);
@@ -1146,7 +1146,7 @@ function Affiliates({ showToast }) {
 
   // Pre-fill the New Affiliate form from an application and open it.
   const approve = (app) => {
-    setForm({ name: app.name, email: app.email || "", code: "", discountPct: 10, commissionPct: 10 });
+    setForm({ name: app.name, email: app.email || "", code: "", discountPct: 10, commissionPct: 10, stackPct: "" });
     setApprovingId(app.id);
     setShowForm(true);
   };
@@ -1166,6 +1166,7 @@ function Affiliates({ showToast }) {
       await apiFetch("/api/affiliates", { method: "POST", body: {
         name: form.name.trim(), email: form.email.trim(), code: form.code.trim(),
         discountRate: Number(form.discountPct) / 100, commissionRate: Number(form.commissionPct) / 100,
+        stackCommissionRate: form.stackPct === "" ? null : Number(form.stackPct) / 100,
         expiresAt: form.expiresAt || null,
       }});
       // If this affiliate came from an application, clear it off the pending list.
@@ -1173,7 +1174,7 @@ function Affiliates({ showToast }) {
         await apiFetch(`/api/affiliate-applications/${approvingId}/dismiss`, { method: "POST" }).catch(() => {});
         setApprovingId(null);
       }
-      setForm({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10, expiresAt: "" });
+      setForm({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10, stackPct: "", expiresAt: "" });
       setShowForm(false);
       await load();
       showToast("Affiliate created");
@@ -1190,6 +1191,7 @@ function Affiliates({ showToast }) {
 
   const startEdit = (a) => {
     setEditForm({ name: a.name, email: a.email || "", code: a.code, discountPct: pct(a.discountRate), commissionPct: pct(a.commissionRate),
+      stackPct: a.stackCommissionRate != null ? pct(a.stackCommissionRate) : "",
       expiresAt: a.expiresAt ? new Date(a.expiresAt).toISOString().slice(0, 10) : "" });
     setEditing(true);
   };
@@ -1201,6 +1203,7 @@ function Affiliates({ showToast }) {
       await apiFetch(`/api/affiliates/${selected.id}`, { method: "PATCH", body: {
         name: editForm.name.trim(), email: editForm.email.trim(), code: editForm.code.trim(),
         discountRate: Number(editForm.discountPct) / 100, commissionRate: Number(editForm.commissionPct) / 100,
+        stackCommissionRate: editForm.stackPct === "" ? null : Number(editForm.stackPct) / 100,
         expiresAt: editForm.expiresAt || null,
       }});
       setEditing(false);
@@ -1338,6 +1341,9 @@ function Affiliates({ showToast }) {
                   <input type="number" min="0" max="100" value={form.commissionPct} onChange={(e) => setForm({ ...form, commissionPct: e.target.value })} className="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
                 </label>
               </div>
+              <label className="block text-xs text-zinc-400">Stack commission % <span className="text-zinc-600">(blank = same as commission)</span>
+                <input type="number" min="0" max="100" placeholder="same as commission" value={form.stackPct} onChange={(e) => setForm({ ...form, stackPct: e.target.value })} className="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
+              </label>
               <label className="block text-xs text-zinc-400">Runs until (optional)
                 <input type="date" value={form.expiresAt} onChange={(e) => setForm({ ...form, expiresAt: e.target.value })} className="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
                 <span className="text-[11px] text-zinc-500 block mt-1">Works through the end of this day, then stops accepting. Blank = runs indefinitely.</span>
@@ -1381,6 +1387,9 @@ function Affiliates({ showToast }) {
                     <input type="number" min="0" max="100" value={editForm.commissionPct} onChange={(e) => setEditForm({ ...editForm, commissionPct: e.target.value })} className="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
                   </label>
                 </div>
+                <label className="block text-xs text-zinc-400">Stack commission % <span className="text-zinc-600">(blank = same as commission)</span>
+                  <input type="number" min="0" max="100" placeholder="same as commission" value={editForm.stackPct} onChange={(e) => setEditForm({ ...editForm, stackPct: e.target.value })} className="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
+                </label>
                 <div>
                   <label className="text-xs text-zinc-500 uppercase tracking-wide font-mono block mb-1">Runs until</label>
                   <input type="date" value={editForm.expiresAt} onChange={(e) => setEditForm({ ...editForm, expiresAt: e.target.value })} className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
