@@ -820,12 +820,14 @@ function Orders({ products, customers, orders, refreshAll, showToast }) {
         }
         return;
       }
-      if (!res.ok) return showToast(data.error || "Could not send that email.");
+      // Surface whatever the server actually said. A generic failure message
+      // here is how a broken send looks identical to a broken deploy.
+      if (!res.ok) return showToast(data.error || `Send failed (HTTP ${res.status})`);
 
       showToast(`${kind === "shipped" ? "Shipment" : "Delivery"} email sent to ${data.to}`);
       refreshAll?.();
-    } catch {
-      showToast("Could not send that email.");
+    } catch (e) {
+      showToast(`Could not reach the server: ${e.message}`);
     } finally {
       setSendingEmail(null);
     }
