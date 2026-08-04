@@ -795,6 +795,41 @@ function Orders({ products, customers, orders, refreshAll, showToast }) {
   const printOne = (o) => {
     if (!printLabels([o])) showToast("That order has no shipping address on file.");
   };
+
+  // Shipment emails. Staff clicking these is asserting the event happened —
+  // there is no carrier integration, so nothing infers a shipment or a
+  // delivery. A 409 means it already went out; we ask before resending rather
+  // than silently double-emailing a customer.
+  const [sendingEmail, setSendingEmail] = useState(null); // `${orderId}:${kind}`
+
+  const sendShipmentEmail = async (o, kind, force = false) => {
+    const key = `${o.id}:${kind}`;
+    setSendingEmail(key);
+    try {
+      const res = await apiFetch(`/api/orders/${o.id}/shipment-email`, {
+        method: "POST",
+        body: { kind, ...(force ? { force: true } : {}) },
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 409) {
+        const when = data.sentAt ? new Date(data.sentAt).toLocaleString() : "earlier";
+        if (confirm(`The ${kind} email already went out ${when}.\n\nSend it again?`)) {
+          setSendingEmail(null);
+          return sendShipmentEmail(o, kind, true);
+        }
+        return;
+      }
+      if (!res.ok) return showToast(data.error || "Could not send that email.");
+
+      showToast(`${kind === "shipped" ? "Shipment" : "Delivery"} email sent to ${data.to}`);
+      refreshAll?.();
+    } catch {
+      showToast("Could not send that email.");
+    } finally {
+      setSendingEmail(null);
+    }
+  };
   const printAllPaid = () => {
     const n = printLabels(paidWithAddress);
     showToast(n ? `Printing ${n} label${n !== 1 ? "s" : ""}` : "No paid orders with an address.");
@@ -896,10 +931,36 @@ function Orders({ products, customers, orders, refreshAll, showToast }) {
                   <td className="px-4 py-2.5 text-right font-mono text-green-400">{money(o.profit)}</td>
                   <td className="px-4 py-2.5 text-center">
                     {hasAddress(o) ? (
-                      <button onClick={() => printOne(o)} title="Print a 4x6 shipping label for this order"
-                        className="inline-flex items-center gap-1.5 border border-zinc-700 text-zinc-300 text-xs font-medium px-2.5 py-1.5 rounded hover:border-amber-500 hover:text-amber-400 whitespace-nowrap">
-                        <Printer size={13} /> Print label
-                      </button>
+                      <div className="inline-flex items-center gap-1.5">
+                        <button onClick={() => printOne(o)} title="Print a 4x6 shipping label for this order"
+                          className="inline-flex items-center gap-1.5 border border-zinc-700 text-zinc-300 text-xs font-medium px-2.5 py-1.5 rounded hover:border-amber-500 hover:text-amber-400 whitespace-nowrap">
+                          <Printer size={13} /> Print label
+                        </button>
+                        <button onClick={() => sendShipmentEmail(o, "shipped")}
+                          disabled={sendingEmail === `${o.id}:shipped`}
+                          title={o.shippedEmailSentAt
+                            ? `Shipment email sent ${new Date(o.shippedEmailSentAt).toLocaleString()}`
+                            : "Email the customer that this order shipped"}
+                          className={`inline-flex items-center gap-1.5 border text-xs font-medium px-2.5 py-1.5 rounded whitespace-nowrap disabled:opacity-40 ${
+                            o.shippedEmailSentAt
+                              ? "border-zinc-800 text-zinc-600 hover:text-zinc-400"
+                              : "border-zinc-700 text-zinc-300 hover:border-amber-500 hover:text-amber-400"
+                          }`}>
+                          <Truck size={13} /> {o.shippedEmailSentAt ? "Shipped ✓" : "Shipped"}
+                        </button>
+                        <button onClick={() => sendShipmentEmail(o, "delivered")}
+                          disabled={sendingEmail === `${o.id}:delivered`}
+                          title={o.deliveredEmailSentAt
+                            ? `Delivery email sent ${new Date(o.deliveredEmailSentAt).toLocaleString()}`
+                            : "Email the customer that this order was delivered"}
+                          className={`inline-flex items-center gap-1.5 border text-xs font-medium px-2.5 py-1.5 rounded whitespace-nowrap disabled:opacity-40 ${
+                            o.deliveredEmailSentAt
+                              ? "border-zinc-800 text-zinc-600 hover:text-zinc-400"
+                              : "border-zinc-700 text-zinc-300 hover:border-amber-500 hover:text-amber-400"
+                          }`}>
+                          <MailCheck size={13} /> {o.deliveredEmailSentAt ? "Delivered ✓" : "Delivered"}
+                        </button>
+                      </div>
                     ) : <span className="text-zinc-700 text-xs">—</span>}
                   </td>
                 </tr>
