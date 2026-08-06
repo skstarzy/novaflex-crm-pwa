@@ -5,12 +5,16 @@
 // offline-capable *shell*, which is what actually matters for a tool
 // where stale inventory numbers would be actively dangerous to trust.
 
-const CACHE_NAME = 'novaflex-crm-shell-v10';
+const CACHE_NAME = 'novaflex-crm-shell-v11';
 const SHELL_FILES = [
   './',
   './index.html',
-  './app.js',
-  './icons.js',
+  // Versioned to match index.html. caches.match() keys on the full URL
+  // including the query, so an unversioned entry here would never be hit once
+  // the page starts asking for ?v=N — precache and request must agree or
+  // offline silently stops working.
+  './app.js?v=11',
+  './icons.js?v=11',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',

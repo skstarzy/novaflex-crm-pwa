@@ -485,7 +485,37 @@ function Inventory({ products, refreshAll, showToast }) {
         ))}
       </div>
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
+      {/* Phone layout — see the note on the Orders table. */}
+      <div className="md:hidden space-y-3">
+        {filtered.map((p) => {
+          const low = p.stock <= p.reorderLevel;
+          const margin = ((Number(p.price) - Number(p.cost)) / Number(p.price)) * 100;
+          return (
+            <div key={p.id} className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-medium truncate">{p.name}</div>
+                  <div className="text-zinc-500 text-xs font-mono truncate">{p.spec} · {p.category}</div>
+                </div>
+                <span className={`shrink-0 font-mono font-semibold px-2 py-0.5 rounded text-sm ${low ? "bg-red-900/50 text-red-300" : "text-zinc-200"}`}>{p.stock}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-zinc-800 text-center">
+                <div><div className="text-[10px] text-zinc-500 uppercase tracking-wide">Cost</div><div className="font-mono text-sm">{money(p.cost)}</div></div>
+                <div><div className="text-[10px] text-zinc-500 uppercase tracking-wide">Price</div><div className="font-mono text-sm">{money(p.price)}</div></div>
+                <div><div className="text-[10px] text-zinc-500 uppercase tracking-wide">Margin</div><div className="font-mono text-sm text-zinc-400">{margin.toFixed(0)}%</div></div>
+              </div>
+              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-zinc-800">
+                <button disabled={busy} onClick={() => adjustStock(p, -1)} className="flex-1 h-9 flex items-center justify-center rounded border border-zinc-700 active:border-amber-500 active:text-amber-400 disabled:opacity-40"><Minus size={14} /></button>
+                <button disabled={busy} onClick={() => adjustStock(p, 1)} className="flex-1 h-9 flex items-center justify-center rounded border border-zinc-700 active:border-amber-500 active:text-amber-400 disabled:opacity-40"><Plus size={14} /></button>
+                <button onClick={() => setEditing(p)} className="flex-1 h-9 flex items-center justify-center rounded border border-zinc-700 active:border-amber-500 active:text-amber-400"><Edit2 size={13} /></button>
+              </div>
+            </div>
+          );
+        })}
+        {filtered.length === 0 && <div className="text-center py-10 text-zinc-500 text-sm">No products match your search.</div>}
+      </div>
+
+      <div className="hidden md:block bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-zinc-800/60 text-zinc-400 text-xs uppercase tracking-wide">
@@ -882,7 +912,75 @@ function Orders({ products, customers, orders, refreshAll, showToast }) {
             : 'No orders yet. Click "New Order" to record your first sale.'}
         </div>
       ) : (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
+        <>
+        {/* Phone layout. The table below is 8 columns wide and gets clipped by
+            its own overflow-hidden wrapper on a narrow screen, so mobile gets
+            stacked cards carrying the same data instead of a scroll nobody can
+            discover. */}
+        <div className="md:hidden space-y-3">
+          {sorted.map((o) => (
+            <div key={o.id} className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-medium truncate">{o.customer?.name}</div>
+                  {o.customer?.email && <div className="text-[11px] text-zinc-500 truncate">{o.customer.email}</div>}
+                </div>
+                <span className={`shrink-0 text-[11px] px-2 py-0.5 rounded font-mono ${o.status === "paid" ? "bg-green-900/40 text-green-300" : o.status === "pending" ? "bg-amber-900/40 text-amber-300" : "bg-zinc-800 text-zinc-400"}`}>{o.status}</span>
+              </div>
+
+              <div className="flex items-baseline justify-between mt-3 pt-3 border-t border-zinc-800">
+                <span className="text-xs text-zinc-500">{new Date(o.createdAt).toLocaleDateString()}</span>
+                <div className="text-right">
+                  <div className="font-mono font-semibold">{money(o.total)}</div>
+                  <div className="font-mono text-xs text-green-400">{money(o.profit)} profit</div>
+                </div>
+              </div>
+
+              <div className="mt-3 pt-3 border-t border-zinc-800 text-xs leading-snug">
+                <div className="text-zinc-500 uppercase tracking-wide text-[10px] mb-1">Ship to</div>
+                {hasAddress(o) ? (
+                  <div className="text-zinc-300">
+                    {o.shipName && <div className="font-medium">{o.shipName}</div>}
+                    <div className="text-zinc-400">{o.shipLine1}{o.shipLine2 ? ", " + o.shipLine2 : ""}</div>
+                    <div className="text-zinc-400">{o.shipCity}, {o.shipState} {o.shipPostal}</div>
+                    {o.shipPhone
+                      ? <div className="text-zinc-500 mt-0.5">{o.shipPhone}</div>
+                      : <div className="text-amber-500/80 mt-0.5">No phone — carrier may reject</div>}
+                  </div>
+                ) : o.status === "paid" ? (
+                  <span className="text-red-400 font-medium">⚠ No address — cannot ship</span>
+                ) : <span className="text-zinc-600">—</span>}
+              </div>
+
+              <div className="mt-3 pt-3 border-t border-zinc-800 text-xs">
+                <div className="text-zinc-500 uppercase tracking-wide text-[10px] mb-1">Items</div>
+                <div className="text-zinc-400">{o.items.map((i) => `${i.name} ×${i.qty}`).join(", ")}</div>
+                {(Number(o.shippingFee) > 0 || Number(o.taxAmount) > 0) && (
+                  <div className="text-[10px] text-zinc-600 mt-0.5">+ ship {money(Number(o.shippingFee)||0)} · tax {money(Number(o.taxAmount)||0)}</div>
+                )}
+              </div>
+
+              {hasAddress(o) && (
+                <div className="mt-3 pt-3 border-t border-zinc-800 grid grid-cols-3 gap-2">
+                  <button onClick={() => printOne(o)}
+                    className="flex items-center justify-center gap-1.5 border border-zinc-700 text-zinc-300 text-xs font-medium py-2 rounded active:border-amber-500 active:text-amber-400">
+                    <Printer size={13} /> Label
+                  </button>
+                  <button onClick={() => sendShipmentEmail(o, "shipped")} disabled={sendingEmail === `${o.id}:shipped`}
+                    className={`flex items-center justify-center gap-1.5 border text-xs font-medium py-2 rounded disabled:opacity-40 ${o.shippedEmailSentAt ? "border-zinc-800 text-zinc-600" : "border-zinc-700 text-zinc-300"}`}>
+                    <Truck size={13} /> {o.shippedEmailSentAt ? "Sent ✓" : "Shipped"}
+                  </button>
+                  <button onClick={() => sendShipmentEmail(o, "delivered")} disabled={sendingEmail === `${o.id}:delivered`}
+                    className={`flex items-center justify-center gap-1.5 border text-xs font-medium py-2 rounded disabled:opacity-40 ${o.deliveredEmailSentAt ? "border-zinc-800 text-zinc-600" : "border-zinc-700 text-zinc-300"}`}>
+                    <MailCheck size={13} /> {o.deliveredEmailSentAt ? "Sent ✓" : "Delivered"}
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="hidden md:block bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-zinc-800/60 text-zinc-400 text-xs uppercase tracking-wide">
@@ -970,6 +1068,7 @@ function Orders({ products, customers, orders, refreshAll, showToast }) {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {showForm && <NewOrderModal products={products} customers={customers} onClose={() => setShowForm(false)} onCreate={createOrder} />}
