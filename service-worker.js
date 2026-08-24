@@ -5,7 +5,12 @@
 // offline-capable *shell*, which is what actually matters for a tool
 // where stale inventory numbers would be actively dangerous to trust.
 
-const CACHE_NAME = 'novaflex-crm-shell-v11';
+// Bumped whenever a shell file changes. The worker deletes every cache whose
+// name is not this one on activate, so the bump is what actually evicts the old
+// app.js from a staff browser. Changing app.js alone does nothing: the browser
+// only fetches a new worker when THIS file's bytes change, and until it does the
+// v11 cache keeps serving the version it already has.
+const CACHE_NAME = 'novaflex-crm-shell-v12';
 const SHELL_FILES = [
   './',
   './index.html',
