@@ -27,7 +27,19 @@ function orderChime() {
   } catch (e) {}
 }
 
-const CATEGORIES = ["All", "Weight Loss", "Growth & Recovery", "Healing", "Skin & Aesthetics", "Cognitive & Longevity", "Stacks & Blends", "Supplies"];
+// Categories come from the products themselves, not a hardcoded list.
+//
+// The list that was here named human outcomes rather than product groups, and
+// none of its entries matched a real category value, so the filter buttons
+// filtered nothing. app.js is served publicly from crm.novaflexusa.com, which
+// made those words readable by anyone - on a business whose storefront spent
+// August removing exactly that language.
+//
+// Deriving them means this file carries no category names at all, and the
+// filter cannot drift from the data again. Do not reintroduce a literal list:
+// naming them here republishes them, and a comment is as public as the code.
+const categoriesFrom = (products) =>
+  ["All", ...Array.from(new Set((products || []).map((p) => p.category).filter(Boolean))).sort()];
 
 // ---------------------------------------------------------------
 // API helper: sends cookies automatically, and transparently retries
@@ -477,7 +489,7 @@ function Inventory({ products, refreshAll, showToast }) {
       </div>
 
       <div className="flex gap-2 flex-wrap">
-        {CATEGORIES.map((c) => (
+        {categoriesFrom(products).map((c) => (
           <button key={c} onClick={() => setCategory(c)}
             className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${category === c ? "border-amber-500 text-amber-400 bg-amber-500/10" : "border-zinc-800 text-zinc-400 hover:border-zinc-600"}`}>
             {c}
@@ -1282,11 +1294,11 @@ function Affiliates({ showToast }) {
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10, stackPct: "", expiresAt: "" });
+  const [form, setForm] = useState({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10, standingOrderPct: "", expiresAt: "" });
   const [applications, setApplications] = useState([]);
   const [approvingId, setApprovingId] = useState(null);
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10, stackPct: "", expiresAt: "" });
+  const [editForm, setEditForm] = useState({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10, standingOrderPct: "", expiresAt: "" });
   const [savingEdit, setSavingEdit] = useState(false);
 
   const pct = (r) => Math.round(Number(r) * 100);
@@ -1308,7 +1320,7 @@ function Affiliates({ showToast }) {
 
   // Pre-fill the New Affiliate form from an application and open it.
   const approve = (app) => {
-    setForm({ name: app.name, email: app.email || "", code: "", discountPct: 10, commissionPct: 10, stackPct: "" });
+    setForm({ name: app.name, email: app.email || "", code: "", discountPct: 10, commissionPct: 10, standingOrderPct: "" });
     setApprovingId(app.id);
     setShowForm(true);
   };
@@ -1328,7 +1340,7 @@ function Affiliates({ showToast }) {
       await apiFetch("/api/affiliates", { method: "POST", body: {
         name: form.name.trim(), email: form.email.trim(), code: form.code.trim(),
         discountRate: Number(form.discountPct) / 100, commissionRate: Number(form.commissionPct) / 100,
-        stackCommissionRate: form.stackPct === "" ? null : Number(form.stackPct) / 100,
+        standingOrderCommissionRate: form.standingOrderPct === "" ? null : Number(form.standingOrderPct) / 100,
         expiresAt: form.expiresAt || null,
       }});
       // If this affiliate came from an application, clear it off the pending list.
@@ -1336,7 +1348,7 @@ function Affiliates({ showToast }) {
         await apiFetch(`/api/affiliate-applications/${approvingId}/dismiss`, { method: "POST" }).catch(() => {});
         setApprovingId(null);
       }
-      setForm({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10, stackPct: "", expiresAt: "" });
+      setForm({ name: "", email: "", code: "", discountPct: 10, commissionPct: 10, standingOrderPct: "", expiresAt: "" });
       setShowForm(false);
       await load();
       showToast("Affiliate created");
@@ -1353,7 +1365,7 @@ function Affiliates({ showToast }) {
 
   const startEdit = (a) => {
     setEditForm({ name: a.name, email: a.email || "", code: a.code, discountPct: pct(a.discountRate), commissionPct: pct(a.commissionRate),
-      stackPct: a.stackCommissionRate != null ? pct(a.stackCommissionRate) : "",
+      standingOrderPct: a.standingOrderCommissionRate != null ? pct(a.standingOrderCommissionRate) : "",
       expiresAt: a.expiresAt ? new Date(a.expiresAt).toISOString().slice(0, 10) : "" });
     setEditing(true);
   };
@@ -1365,7 +1377,7 @@ function Affiliates({ showToast }) {
       await apiFetch(`/api/affiliates/${selected.id}`, { method: "PATCH", body: {
         name: editForm.name.trim(), email: editForm.email.trim(), code: editForm.code.trim(),
         discountRate: Number(editForm.discountPct) / 100, commissionRate: Number(editForm.commissionPct) / 100,
-        stackCommissionRate: editForm.stackPct === "" ? null : Number(editForm.stackPct) / 100,
+        standingOrderCommissionRate: editForm.standingOrderPct === "" ? null : Number(editForm.standingOrderPct) / 100,
         expiresAt: editForm.expiresAt || null,
       }});
       setEditing(false);
@@ -1503,8 +1515,8 @@ function Affiliates({ showToast }) {
                   <input type="number" min="0" max="100" value={form.commissionPct} onChange={(e) => setForm({ ...form, commissionPct: e.target.value })} className="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
                 </label>
               </div>
-              <label className="block text-xs text-zinc-400">Stack commission % <span className="text-zinc-600">(blank = same as commission)</span>
-                <input type="number" min="0" max="100" placeholder="same as commission" value={form.stackPct} onChange={(e) => setForm({ ...form, stackPct: e.target.value })} className="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
+              <label className="block text-xs text-zinc-400">Standing order commission % <span className="text-zinc-600">(blank = same as commission)</span>
+                <input type="number" min="0" max="100" placeholder="same as commission" value={form.standingOrderPct} onChange={(e) => setForm({ ...form, standingOrderPct: e.target.value })} className="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
               </label>
               <label className="block text-xs text-zinc-400">Runs until (optional)
                 <input type="date" value={form.expiresAt} onChange={(e) => setForm({ ...form, expiresAt: e.target.value })} className="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
@@ -1549,8 +1561,8 @@ function Affiliates({ showToast }) {
                     <input type="number" min="0" max="100" value={editForm.commissionPct} onChange={(e) => setEditForm({ ...editForm, commissionPct: e.target.value })} className="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
                   </label>
                 </div>
-                <label className="block text-xs text-zinc-400">Stack commission % <span className="text-zinc-600">(blank = same as commission)</span>
-                  <input type="number" min="0" max="100" placeholder="same as commission" value={editForm.stackPct} onChange={(e) => setEditForm({ ...editForm, stackPct: e.target.value })} className="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
+                <label className="block text-xs text-zinc-400">Standing order commission % <span className="text-zinc-600">(blank = same as commission)</span>
+                  <input type="number" min="0" max="100" placeholder="same as commission" value={editForm.standingOrderPct} onChange={(e) => setEditForm({ ...editForm, standingOrderPct: e.target.value })} className="w-full mt-1 bg-zinc-950 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500" />
                 </label>
                 <div>
                   <label className="text-xs text-zinc-500 uppercase tracking-wide font-mono block mb-1">Runs until</label>
