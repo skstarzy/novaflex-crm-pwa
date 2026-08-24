@@ -662,7 +662,11 @@ function ReceiveShipmentModal({ products, onClose, onReceive }) {
 // ---------------------------------------------------------------------------
 
 const SHIP_FROM = {
-  name: "NovaFlex Peptides",
+  // The registered entity, which is what belongs on a carrier label and on the
+  // parcel a customer opens. The previous value carried the discontinued
+  // second word onto every shipment - the one surface where a wrong name is
+  // physical, travels to the buyer, and cannot be corrected after the fact.
+  name: "NovaFlex LLC",
   line1: "120 N. Tech Dr., Suite 102",
   city: "Clayton", state: "NC", postal: "27520",
   phone: "(919) 333-7234",
