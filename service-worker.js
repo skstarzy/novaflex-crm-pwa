@@ -18,8 +18,8 @@ const SHELL_FILES = [
   // including the query, so an unversioned entry here would never be hit once
   // the page starts asking for ?v=N — precache and request must agree or
   // offline silently stops working.
-  './app.js?v=11',
-  './icons.js?v=11',
+  './app.js?v=12',
+  './icons.js?v=12',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
