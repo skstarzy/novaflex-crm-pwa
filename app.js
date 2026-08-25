@@ -655,7 +655,7 @@ function ReceiveShipmentModal({ products, onClose, onReceive }) {
 // Order rows carry the ship-to address captured at checkout (shipName,
 // shipLine1/2, shipCity, shipState, shipPostal). The CRM showed it as one dim
 // 11px line under the customer name, which is unusable for actually packing a
-// box — hence a real 4x6 label, the standard thermal size.
+// box — hence a real 3x4in label. See LABEL below for the geometry.
 //
 // Labels render into #labelSheet, which lives OUTSIDE #root so React never
 // re-renders over it mid-print, and is hidden on screen / shown only in print.
@@ -690,25 +690,52 @@ function addressLines(o) {
 // Kept out of addressLines() on purpose. The carrier wants a contact number,
 // but it is not part of the deliverable address — mixing it in would set it at
 // address size in the SHIP TO box and push a four-line address onto five,
-// which is what makes a 4x6 overflow. It gets its own line, smaller, below.
+// which is what makes the label overflow. It gets its own line, smaller, below.
 function shipPhone(o) {
   return (o && o.shipPhone) ? String(o.shipPhone) : "";
 }
 
-function labelHTML(o) {
+/**
+ * Label geometry, in one place.
+ *
+ * Was a fixed 4x6in — the standard thermal size, and too large for the bags
+ * these actually ship in. 3x4in is half the area, so the type has to come down
+ * with it: SCALE multiplies every point size below, and PAD must match the
+ * header's negative margin or the black bar stops reaching the edges.
+ *
+ * To resize again, change W/H and adjust SCALE until printLabelPreview() in the
+ * console reports no overflow. Nothing else needs touching.
+ */
+const LABEL = { W: 3, H: 4, PAD_Y: 0.2, PAD_X: 0.22, SCALE: 0.72, MIN_ADDRESS_SCALE: 0.66 };
+const lpt = (n, scale) => (n * (scale == null ? LABEL.SCALE : scale)).toFixed(2) + "pt";
+
+function labelHTML(o, scale) {
+  const sc = (scale == null ? LABEL.SCALE : scale);
+  const lpt = (n) => (n * sc).toFixed(2) + "pt";
+  // The delivery address does not shrink below this. A courier reads it at
+  // arm's length; the packing list is read at close range by whoever fills the
+  // bag, and the legal block is not read at all until it has to be. Letting one
+  // scale govern all three meant an eight-item order pushed the address to
+  // 8.4pt to make room for a list nobody squints at.
+  // floorAddress is dropped only when a label cannot be made to fit any other
+  // way. A slightly small address still gets delivered; a clipped one does not.
+  const addrScale = (o && o.__noAddressFloor) ? sc : Math.max(sc, LABEL.MIN_ADDRESS_SCALE);
+  const apt = (n) => (n * addrScale).toFixed(2) + "pt";
   const esc = (v) => String(v == null ? "" : v).replace(/[&<>"]/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   // Ship-to is the one block a carrier actually reads, so it stays the largest
-  // thing on the label and nothing decorative goes near it.
+  // thing on the label and nothing decorative goes near it. At this scale the
+  // first line lands near 12pt and the rest near 11pt, which is still well
+  // above the point where a scanner or a courier struggles.
   const to = addressLines(o).map(
-    (t, i) => `<div style="font-size:${i === 0 ? "16.5pt" : "15pt"};font-weight:${i === 0 ? 700 : 500};line-height:1.34;">${esc(t)}</div>`
+    (t, i) => `<div style="font-size:${i === 0 ? apt(16.5) : apt(15)};font-weight:${i === 0 ? 700 : 500};line-height:1.3;">${esc(t)}</div>`
   ).join("");
 
   const items = (o.items || []).map(
     (i) => `<tr>
-      <td style="font-size:8.5pt;line-height:1.5;padding:1.5pt 0;">${esc(i.name)}</td>
-      <td style="font-size:8.5pt;line-height:1.5;padding:1.5pt 0;text-align:right;white-space:nowrap;">&times;&nbsp;${esc(i.qty)}</td>
+      <td style="font-size:${lpt(8.5)};line-height:1.45;padding:1pt 0;">${esc(i.name)}</td>
+      <td style="font-size:${lpt(8.5)};line-height:1.45;padding:1pt 0;text-align:right;white-space:nowrap;">&times;&nbsp;${esc(i.qty)}</td>
     </tr>`
   ).join("");
   const count = (o.items || []).reduce((n, i) => n + (Number(i.qty) || 0), 0);
@@ -721,53 +748,52 @@ function labelHTML(o) {
   // so any colour would come out as unpredictable grey.
   return `<div class="ship-label">
 
-    <div style="background:#000;color:#fff;margin:-0.28in -0.3in 0;padding:9pt 0.3in 8pt;
+    <div style="background:#000;color:#fff;margin:-${LABEL.PAD_Y}in -${LABEL.PAD_X}in 0;padding:${lpt(9)} ${LABEL.PAD_X}in ${lpt(8)};
                 display:flex;justify-content:space-between;align-items:center;">
       <div>
-        <div style="font-size:15pt;font-weight:800;letter-spacing:-0.4px;line-height:1;">NOVAFLEX</div>
-        <div style="font-size:6.5pt;letter-spacing:2.4px;margin-top:2.5pt;">P E P T I D E S</div>
+        <div style="font-size:${lpt(15)};font-weight:800;letter-spacing:-0.3px;line-height:1;">NOVAFLEX</div>
       </div>
-      <div style="text-align:right;font-size:7pt;line-height:1.5;letter-spacing:.4px;">
+      <div style="text-align:right;font-size:${lpt(7)};line-height:1.45;letter-spacing:.3px;">
         <div style="opacity:.75;">ORDER</div>
-        <div style="font-size:9.5pt;font-weight:700;letter-spacing:.6px;">${esc(ref)}</div>
+        <div style="font-size:${lpt(9.5)};font-weight:700;letter-spacing:.5px;">${esc(ref)}</div>
         <div style="opacity:.75;margin-top:1pt;">${esc(date)}</div>
       </div>
     </div>
 
-    <div style="display:flex;gap:14pt;margin-top:11pt;">
+    <div style="display:flex;gap:${lpt(14)};margin-top:${lpt(10)};">
       <div style="flex:1;">
-        <div style="font-size:6.5pt;letter-spacing:1.4px;font-weight:700;">FROM</div>
-        <div style="font-size:8pt;line-height:1.45;margin-top:2pt;">
+        <div style="font-size:${lpt(6.5)};letter-spacing:1.1px;font-weight:700;">FROM</div>
+        <div style="font-size:${lpt(8)};line-height:1.4;margin-top:2pt;">
           ${esc(SHIP_FROM.name)}<br>${esc(SHIP_FROM.line1)}<br>
           ${esc(SHIP_FROM.city)}, ${esc(SHIP_FROM.state)} ${esc(SHIP_FROM.postal)}<br>${esc(SHIP_FROM.phone)}
         </div>
       </div>
       <div style="text-align:right;">
-        <div style="font-size:6.5pt;letter-spacing:1.4px;font-weight:700;">ITEMS</div>
-        <div style="font-size:19pt;font-weight:800;line-height:1;margin-top:2pt;">${count}</div>
+        <div style="font-size:${lpt(6.5)};letter-spacing:1.1px;font-weight:700;">ITEMS</div>
+        <div style="font-size:${lpt(19)};font-weight:800;line-height:1;margin-top:2pt;">${count}</div>
       </div>
     </div>
 
-    <div style="font-size:6.5pt;letter-spacing:1.4px;font-weight:700;margin-top:13pt;">SHIP TO</div>
-    <div style="border:2.5pt solid #000;padding:12pt 12pt 13pt;margin-top:4pt;">${to}${
+    <div style="font-size:${lpt(6.5)};letter-spacing:1.1px;font-weight:700;margin-top:${lpt(11)};">SHIP TO</div>
+    <div style="border:2pt solid #000;padding:${lpt(10)} ${lpt(10)} ${lpt(11)};margin-top:3pt;">${to}${
       shipPhone(o)
-        ? `<div style="font-size:10.5pt;font-weight:600;margin-top:6pt;letter-spacing:.2px;">TEL ${esc(shipPhone(o))}</div>`
+        ? `<div style="font-size:${apt(10.5)};font-weight:600;margin-top:5pt;letter-spacing:.2px;">TEL ${esc(shipPhone(o))}</div>`
         : ""
     }</div>
 
-    <div style="font-size:6.5pt;letter-spacing:1.4px;font-weight:700;margin-top:13pt;">PACKING LIST</div>
-    <table style="width:100%;border-collapse:collapse;border-top:1pt solid #000;margin-top:3pt;padding-top:3pt;">
+    <div style="font-size:${lpt(6.5)};letter-spacing:1.1px;font-weight:700;margin-top:${lpt(11)};">PACKING LIST</div>
+    <table style="width:100%;border-collapse:collapse;border-top:1pt solid #000;margin-top:3pt;">
       ${items}
     </table>
 
     <div style="margin-top:auto;">
-      <div style="border-top:1pt solid #000;padding-top:8pt;text-align:center;">
-        <div style="font-size:9pt;font-weight:700;letter-spacing:.2px;">Thank you for choosing NovaFlex</div>
-        <div style="font-size:7.5pt;line-height:1.45;margin-top:2pt;">
+      <div style="border-top:1pt solid #000;padding-top:${lpt(7)};text-align:center;">
+        <div style="font-size:${lpt(9)};font-weight:700;letter-spacing:.2px;">Thank you for choosing NovaFlex</div>
+        <div style="font-size:${lpt(7.5)};line-height:1.4;margin-top:2pt;">
           Questions about this shipment? support@novaflexusa.com
         </div>
       </div>
-      <div style="border-top:1pt solid #000;margin-top:8pt;padding-top:6pt;font-size:6pt;line-height:1.45;">
+      <div style="border-top:1pt solid #000;margin-top:${lpt(7)};padding-top:${lpt(5)};font-size:${lpt(6)};line-height:1.4;">
         <b>FOR RESEARCH USE ONLY \u2014 NOT FOR HUMAN OR VETERINARY USE.</b>
         Not drugs, foods, or cosmetics. Sales restricted to qualified researchers, 21+.
       </div>
@@ -776,11 +802,57 @@ function labelHTML(o) {
 }
 
 // Render label(s) into the print-only container and open the print dialog.
+/**
+ * The largest type size at which this particular label still fits.
+ *
+ * A single fixed scale has to suit the worst address anyone has ever entered —
+ * measured here, a 46-character street line plus a second line plus five items
+ * needs 0.60, which puts the delivery address near 8.7pt. Every ordinary label
+ * would then print that small for the sake of a rare one.
+ *
+ * So each label is measured on its own and only shrinks if it has to. A typical
+ * three-item order keeps the full size; a long one steps down until it fits.
+ * Measured off-screen at the real 3x4in box, because guessing is what produced
+ * the 0.8in overflow this replaced.
+ */
+const LABEL_SCALES = [0.72, 0.68, 0.64, 0.60, 0.56, 0.52];
+
+function fitLabelHTML(o) {
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden;";
+  document.body.appendChild(probe);
+  const fits = (candidate) => {
+    probe.innerHTML = candidate;
+    const el = probe.firstElementChild;
+    return !!el && el.scrollHeight <= el.clientHeight;
+  };
+  try {
+    // First pass: keep the address at or above its floor.
+    for (const scale of LABEL_SCALES) {
+      const html = labelHTML(o, scale);
+      if (fits(html)) return html;
+    }
+    // Second pass: a long address with a long order cannot satisfy both. Let
+    // the address scale with everything else rather than run off the label.
+    const relaxed = Object.assign({}, o, { __noAddressFloor: true });
+    for (const scale of LABEL_SCALES) {
+      const html = labelHTML(relaxed, scale);
+      if (fits(html)) return html;
+    }
+    // Still nothing. Smallest available, and say so, because a label that
+    // silently loses its last line is worse than one that arrives noticed.
+    console.warn("[label] order", o && o.id, "does not fit a 3x4 label even at the smallest size");
+    return labelHTML(relaxed, LABEL_SCALES[LABEL_SCALES.length - 1]);
+  } finally {
+    probe.remove();
+  }
+}
+
 function printLabels(orders) {
   const list = orders.filter(hasAddress);
   if (!list.length) return 0;
   const sheet = document.getElementById("labelSheet");
-  sheet.innerHTML = list.map(labelHTML).join("");
+  sheet.innerHTML = list.map(fitLabelHTML).join("");
   const cleanup = () => { sheet.innerHTML = ""; window.removeEventListener("afterprint", cleanup); };
   window.addEventListener("afterprint", cleanup);
   window.print();
@@ -1048,7 +1120,7 @@ function Orders({ products, customers, orders, refreshAll, showToast }) {
                   <td className="px-4 py-2.5 text-center">
                     {hasAddress(o) ? (
                       <div className="inline-flex items-center gap-1.5">
-                        <button onClick={() => printOne(o)} title="Print a 4x6 shipping label for this order"
+                        <button onClick={() => printOne(o)} title="Print a 3x4 shipping label for this order"
                           className="inline-flex items-center gap-1.5 border border-zinc-700 text-zinc-300 text-xs font-medium px-2.5 py-1.5 rounded hover:border-amber-500 hover:text-amber-400 whitespace-nowrap">
                           <Printer size={13} /> Print label
                         </button>

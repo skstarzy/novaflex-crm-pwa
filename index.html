@@ -30,14 +30,37 @@
   ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
 
   /* ---- Shipping labels ----
-     Labels are 4x6in, the standard thermal-printer size, and also print fine
-     centered on Letter. When printing we hide the whole app and show only the
-     label sheet, so the operator gets labels and nothing else — no nav, no
-     table, no dark background eating a toner cartridge. */
+     3x4in. Was 4x6 — the standard thermal size, and too large for the bags
+     these ship in; it covered the whole front of the packaging. Half the area,
+     so the type came down with it (LABEL.SCALE in app.js).
+
+     The size lives in TWO places that must agree: @page and .ship-label below,
+     and LABEL.W/H in app.js which the header's negative margins are derived
+     from. Change both or the black bar stops reaching the edges.
+
+     When printing we hide the whole app and show only the label sheet, so the
+     operator gets labels and nothing else — no nav, no table, no dark
+     background eating a toner cartridge. */
   #labelSheet { display: none; }
 
+  /* Geometry lives OUTSIDE @media print on purpose.
+     fitLabelHTML() measures a candidate label off-screen to decide whether it
+     overflows, and an element only overflows if it has a fixed box. Defined
+     print-only, .ship-label had no height on screen, every probe reported a
+     perfect fit, and the auto-fit would have silently done nothing. */
+  .ship-label {
+    width: 3in; height: 4in;
+    padding: 0.2in 0.22in;
+    box-sizing: border-box;
+    display: flex; flex-direction: column;
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    background: #fff;
+    color: #000;
+    overflow: hidden;
+  }
+
   @media print {
-    @page { size: 4in 6in; margin: 0; }
+    @page { size: 3in 4in; margin: 0; }
     html, body { background: #fff !important; margin: 0; padding: 0; }
     body > #root { display: none !important; }
     #labelSheet {
@@ -46,16 +69,7 @@
       background: #fff;
       color: #000;
     }
-    .ship-label {
-      width: 4in; height: 6in;
-      padding: 0.28in 0.3in;
-      box-sizing: border-box;
-      page-break-after: always;
-      break-after: page;
-      display: flex; flex-direction: column;
-      font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
-      color: #000;
-    }
+    .ship-label { page-break-after: always; break-after: page; }
     .ship-label:last-child { page-break-after: auto; break-after: auto; }
   }
 </style>
@@ -69,8 +83,8 @@
     window.NOVAFLEX_API_URL = "https://api.novaflexusa.com"; // deployed backend (Railway, custom domain)
   </script>
 
-  <script type="text/babel" src="icons.js?v=12"></script>
-  <script type="text/babel" src="app.js?v=12"></script>
+  <script type="text/babel" src="icons.js?v=13"></script>
+  <script type="text/babel" src="app.js?v=13"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
