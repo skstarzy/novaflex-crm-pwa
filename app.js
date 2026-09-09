@@ -853,8 +853,20 @@ function printLabels(orders) {
   if (!list.length) return 0;
   const sheet = document.getElementById("labelSheet");
   sheet.innerHTML = list.map(fitLabelHTML).join("");
-  const cleanup = () => { sheet.innerHTML = ""; window.removeEventListener("afterprint", cleanup); };
-  window.addEventListener("afterprint", cleanup);
+  /*
+   * The labels are deliberately NOT cleared after printing.
+   *
+   * They used to be, on the "afterprint" event, which sounds like "the paper
+   * came out" and is not. Safari fires it as soon as print() returns, and
+   * Chrome re-renders the preview whenever the operator changes paper size or
+   * orientation - so the handler wiped #labelSheet before the page was ever
+   * rasterised and a sheet came out blank but for the browser's own header and
+   * footer. That is what happened on 9 September.
+   *
+   * There is nothing to clean up. #labelSheet is display:none on screen, so
+   * leaving the markup in place costs a few kilobytes and shows the operator
+   * nothing, and the next print overwrites it on the line above.
+   */
   window.print();
   return list.length;
 }

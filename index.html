@@ -62,8 +62,14 @@
   @media print {
     @page { size: 3in 4in; margin: 0; }
     html, body { background: #fff !important; margin: 0; padding: 0; }
-    body > #root { display: none !important; }
-    #labelSheet {
+    /* Both rules are conditional on the sheet actually holding labels.
+       Printing straight from the browser - Cmd+P, or the dialog re-rendering
+       after the sheet was emptied - used to hide the app and show an empty
+       sheet, which prints as a blank page with no clue why. Now the app is
+       hidden only when there is something to replace it with, so the worst
+       case is printing the screen rather than printing nothing. */
+    body:has(#labelSheet > *) > #root { display: none !important; }
+    #labelSheet:has(> *) {
       display: block !important;
       position: static;
       background: #fff;
@@ -83,8 +89,8 @@
     window.NOVAFLEX_API_URL = "https://api.novaflexusa.com"; // deployed backend (Railway, custom domain)
   </script>
 
-  <script type="text/babel" src="icons.js?v=13"></script>
-  <script type="text/babel" src="app.js?v=13"></script>
+  <script type="text/babel" src="icons.js?v=14"></script>
+  <script type="text/babel" src="app.js?v=14"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
