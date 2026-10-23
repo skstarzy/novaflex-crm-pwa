@@ -10,7 +10,7 @@
 // app.js from a staff browser. Changing app.js alone does nothing: the browser
 // only fetches a new worker when THIS file's bytes change, and until it does the
 // v11 cache keeps serving the version it already has.
-const CACHE_NAME = 'novaflex-crm-shell-v14';
+const CACHE_NAME = 'novaflex-crm-shell-v15';
 const SHELL_FILES = [
   './',
   './index.html',
@@ -18,8 +18,8 @@ const SHELL_FILES = [
   // including the query, so an unversioned entry here would never be hit once
   // the page starts asking for ?v=N — precache and request must agree or
   // offline silently stops working.
-  './app.js?v=14',
-  './icons.js?v=14',
+  './app.js?v=15',
+  './icons.js?v=15',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',

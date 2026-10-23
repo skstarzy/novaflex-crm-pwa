@@ -60,7 +60,19 @@ async function apiFetch(path, options = {}) {
   if (res.status === 401) {
     let code;
     try { code = (await res.clone().json()).code; } catch {}
-    if (code === "TOKEN_EXPIRED") {
+    // NO_TOKEN as well as TOKEN_EXPIRED.
+    //
+    // The access cookie has a 2 hour Max-Age, so the browser deletes it rather
+    // than sending an expired one. The request then arrives with no token at
+    // all and the API answers NO_TOKEN / "Not authenticated." - not
+    // TOKEN_EXPIRED, which only happens in the narrow window where the cookie
+    // still exists but the JWT inside it has lapsed.
+    //
+    // Refreshing on TOKEN_EXPIRED alone therefore meant the CRM gave up every
+    // two hours and asked staff to sign in again, while holding a refresh
+    // token that would have worked. If the refresh cookie is gone too the call
+    // below fails and the original 401 stands, which is the correct outcome.
+    if (code === "TOKEN_EXPIRED" || code === "NO_TOKEN") {
       const refreshed = await fetch(`${API}/api/auth/refresh`, { method: "POST", credentials: "include" });
       if (refreshed.ok) {
         res = await doFetch();
